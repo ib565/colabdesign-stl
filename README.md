@@ -50,15 +50,21 @@ python examples/chamfer_demo.py
 Shows squared vs sqrt losses and gradient values.
 
 ## Stage 3a: Minimal ColabDesign integration
-Smoke-test the shape loss with a simple line target (few iterations by default):
+Smoke-test the shape loss with a simple line target:
 ```pwsh
 # Ensure colabdesign is installed / on PYTHONPATH. Run with GPU for speed.
-python examples/minimal_chamfer_hallucination.py --iters 20 --length 50
+python examples/minimal_chamfer_hallucination.py \
+  --soft-iters 20 --temp-iters 10 --hard-iters 5 \
+  --length 50 --verbose 1
 ```
 What to expect:
-- No crashes during design
-- `chamfer` key present in the final log
+- JAX version/devices printed
+- Model params loaded (5 models)
+- Stage 1/2/3 banners with per-step logs showing `chamfer` loss
+- Final log entry with `chamfer` key (decreases over iterations)
 - Sequence printed (first 60 aa)
+
+**Note:** Uses `design_3stage()` with separate soft/temp/hard iteration counts for better optimization. First JIT compile takes 1-3 minutes on CPU.
 
 ### ColabDesign install & Alphafold weights
 - Install ColabDesign into the active venv (sibling clone):
@@ -92,5 +98,7 @@ What to expect:
 - `requirements.txt` — numpy, trimesh, matplotlib, jax, pytest.
 
 ## Next steps (roadmap)
-- Stage 3: Wire into ColabDesign via `loss_callback` factory and add an end-to-end design script/notebook.
+- Stage 3b: Full STL integration (`STLProteinDesigner` class + end-to-end design script)
+- Stage 3c: Verification (Cα coordinate matching, centering checks, multi-seed testing)
+- Stage 4: Validation with real STL shapes (helix, ellipsoid, etc.)
 

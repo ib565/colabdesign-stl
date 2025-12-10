@@ -343,84 +343,109 @@ Wire the STL processing and loss function into ColabDesign's hallucination proto
 
 **Weight defaults:** For hallucination, only `con` (and `i_con` for multichain) is nonzero by default. `plddt`, `pae`, `exp_res`, and `helix` start at 0, so set them explicitly alongside your custom `chamfer` term.
 
-### Stage 3a: Minimal Integration (Hardcoded Test)
+### Stage 3a: Minimal Integration (Hardcoded Test) ✅
+
+**Status:** Complete. See `examples/minimal_chamfer_hallucination.py` for full implementation.
 
 #### Tasks
 
-1. **Create the loss callback using factory pattern**
+1. **Create the loss callback using factory pattern** ✅
 
+   Implemented in `src/losses.py` as `make_shape_loss()`:
    ```python
-   import jax.numpy as jnp
-
-   def make_shape_loss(target_points: np.ndarray):
-       """
-       Factory function that creates a shape loss callback.
-       
-       Args:
-           target_points: Target point cloud, shape (N, 3)
-           
-       Returns:
-           Loss callback function compatible with ColabDesign
-       """
+   def make_shape_loss(target_points: np.ndarray, *, use_sqrt: bool = False) -> Callable:
+       """Create a Chamfer-based loss callback compatible with ColabDesign."""
        target = jnp.asarray(target_points, dtype=jnp.float32)
        target_centered = target - target.mean(axis=0)
        
+       CA_INDEX = 1  # Atom order: N=0, CA=1, C=2, O=3, CB=4, ...
+       
        def shape_loss(inputs, outputs, aux):
-           # Extract Cα coordinates
-           # Atom order: N=0, CA=1, C=2, O=3, CB=4, ...
-           ca = outputs["structure_module"]["final_atom_positions"][:, 1, :]
-           
-           # Center the predicted coordinates
+           positions = outputs["structure_module"]["final_atom_positions"]
+           ca = positions[:, CA_INDEX, :]
            ca_centered = ca - ca.mean(axis=0)
-           
-           # Compute Chamfer distance
-           loss = chamfer_distance(ca_centered, target_centered)
-           
+           loss = chamfer_distance(ca_centered, target_centered, use_sqrt=use_sqrt)
            return {"chamfer": loss}
        
        return shape_loss
    ```
 
-2. **Test with hardcoded simple target**
+2. **Test with hardcoded simple target** ✅
 
+   Implemented in `examples/minimal_chamfer_hallucination.py`:
    ```python
-   # Simple test: line of points
-   test_target = np.linspace([0, 0, 0], [100, 0, 0], 50).astype(np.float32)
+   # Simple 1D line target along x-axis
+   target = np.linspace([0, 0, 0], [100, 0, 0], length).astype(np.float32)
+   loss_fn = make_shape_loss(target, use_sqrt=use_sqrt)
    
-   from colabdesign import mk_afdesign_model
+   af_model = mk_afdesign_model(
+       protocol="hallucination",
+       loss_callback=loss_fn,
+       data_dir=DATA_DIR  # Points to ColabDesign folder with params/
+   )
    
-   loss_fn = make_shape_loss(test_target)
-   af_model = mk_afdesign_model(protocol="hallucination", loss_callback=loss_fn)
-   # Default AF hallucination weights set only "con"; plddt/pae/exp_res/helix start at 0.
+   # Set weights explicitly
    af_model.opt["weights"].update({
        "chamfer": 1.0,
+       "con": 1.0,
        "plddt": 0.1,
        "pae": 0.05,
-       "exp_res": 0.0
+       "exp_res": 0.0,
+       "helix": 0.0,
    })
    
-   af_model.prep_inputs(length=50)
-   af_model.restart(mode="gumbel", seed=0)
+   af_model.prep_inputs(length=length)
+   af_model.restart(mode="gumbel", seed=seed)
    
-   # Run just a few iterations to verify it works
-   af_model.design(10)
+   # Run 3-stage design (recommended for hallucination)
+   af_model.design_3stage(
+       soft_iters=20,
+       temp_iters=10,
+       hard_iters=5,
+       verbose=1
+   )
    
-   # Check that chamfer loss is being tracked
-   print(af_model._tmp["log"][-1])
+   # Check results
+   logs = af_model._tmp.get("log", [])
+   print("Final log:", logs[-1])
+   print("Sequence:", af_model.get_seqs()[0])
    ```
 
-3. **Verify the loss is being optimized**
-   - Chamfer loss should appear in logs
-   - Loss should decrease over iterations
+3. **Verify the loss is being optimized** ✅
+   - Chamfer loss appears in logs ✓
+   - Loss decreases over iterations ✓ (observed: 482 → 436 in test run)
+   - Sequence extraction works ✓
 
 #### Checkpoint
 
-- [ ] No crashes during optimization
-- [ ] "chamfer" appears in loss logs
-- [ ] Chamfer loss decreases over iterations
-- [ ] Can extract final sequence with `af_model.get_seqs()`
+- [x] No crashes during optimization
+- [x] "chamfer" appears in loss logs
+- [x] Chamfer loss decreases over iterations
+- [x] Can extract final sequence with `af_model.get_seqs()`
 
-#### Time Estimate: 0.5 days
+#### Usage
+
+Run the smoke test:
+```pwsh
+python examples/minimal_chamfer_hallucination.py \
+  --soft-iters 20 --temp-iters 10 --hard-iters 5 \
+  --length 50 --verbose 1
+```
+
+Expected output:
+- JAX version/devices printed
+- Model params loaded (5 models)
+- Stage 1/2/3 banners with per-step logs
+- Final log entry with `chamfer` key
+- Designed sequence printed
+
+**Notes:**
+- Requires ColabDesign installed (`pip install -e ../ColabDesign`)
+- Requires AlphaFold params in `../ColabDesign/params/`
+- First JIT compile takes 1-3 minutes (CPU) or ~30s (GPU)
+- Uses `design_3stage()` instead of `design()` for better results (logits→soft→hard annealing)
+
+#### Time Estimate: 0.5 days (completed)
 
 ---
 
