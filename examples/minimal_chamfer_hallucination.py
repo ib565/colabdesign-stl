@@ -21,6 +21,14 @@ if str(ROOT) not in sys.path:
 
 from src.losses import make_shape_loss  # noqa: E402
 
+DATA_DIR = Path(__file__).resolve().parents[1] / ".." / "ColabDesign"
+
+def _check_jax():
+    """Print JAX platform info for debugging."""
+    import jax
+    print(f"JAX version: {jax.__version__}")
+    print(f"JAX devices: {jax.devices()}")
+    print(f"JAX default backend: {jax.default_backend()}", flush=True)
 
 def _mk_model(
     length: int,
@@ -43,7 +51,10 @@ def _mk_model(
     target = np.linspace([0, 0, 0], [100, 0, 0], length).astype(np.float32)
     loss_fn = make_shape_loss(target, use_sqrt=use_sqrt)
 
-    af_model = mk_afdesign_model(protocol="hallucination", loss_callback=loss_fn)
+    af_model = mk_afdesign_model(protocol="hallucination", loss_callback=loss_fn, data_dir=DATA_DIR)
+    print("Loaded model params:", getattr(af_model, "_model_names", []))
+    if not getattr(af_model, "_model_names", []):
+        raise RuntimeError(f"No model params loaded. Check data_dir={DATA_DIR} or AF_DATA_DIR.")
 
     # Explicitly set weights; ColabDesign defaults set many to zero.
     weights = af_model.opt["weights"]
@@ -67,7 +78,9 @@ def _mk_model(
 def main():
     parser = argparse.ArgumentParser(description="Minimal Chamfer loss demo.")
     parser.add_argument("--length", type=int, default=50, help="Protein length.")
-    parser.add_argument("--iters", type=int, default=20, help="Design iterations.")
+    parser.add_argument("--soft-iters", type=int, default=5, help="Soft design iterations.")
+    parser.add_argument("--temp-iters", type=int, default=3, help="Temp annealing iterations.")
+    parser.add_argument("--hard-iters", type=int, default=2, help="Hard design iterations.")
     parser.add_argument(
         "--chamfer-weight", type=float, default=1.0, help="Weight for Chamfer loss."
     )
@@ -79,7 +92,11 @@ def main():
         help="Use sqrt Chamfer (Å units, slightly slower).",
     )
     parser.add_argument("--seed", type=int, default=0, help="Random seed.")
+    parser.add_argument("--verbose", type=int, default=1, help="Print every N steps.")
+
     args = parser.parse_args()
+
+    _check_jax()
 
     af_model = _mk_model(
         length=args.length,
@@ -90,16 +107,29 @@ def main():
         seed=args.seed,
     )
 
-    print("Starting design...")
-    af_model.design(args.iters)
+    print("Starting design... (first JIT can take 1–3 minutes)", flush=True)
+    print(f"  soft_iters={args.soft_iters}, temp_iters={args.temp_iters}, hard_iters={args.hard_iters}", flush=True)
+    try:
+        af_model.design_3stage(
+            soft_iters=args.soft_iters,
+            temp_iters=args.temp_iters,
+            hard_iters=args.hard_iters,
+            verbose=max(1, args.verbose),
+        )
+    except Exception as exc:
+        print(f"ERROR during design: {exc}", flush=True)
+        import traceback
+        traceback.print_exc()
+        raise
+    print("Design finished.", flush=True)
 
     logs = af_model._tmp.get("log", [])
     final_log: Dict[str, Any] = logs[-1] if logs else {}
-    print("Final log entry:", final_log)
+    print("Final log entry:", final_log, flush=True)
 
     seqs = af_model.get_seqs()
     if seqs:
-        print("Designed sequence (first 60 aa):", seqs[0][:60])
+        print("Designed sequence (first 60 aa):", seqs[0][:60], flush=True)
 
 
 if __name__ == "__main__":
