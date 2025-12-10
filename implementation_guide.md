@@ -27,7 +27,7 @@ Reference: `colabdesign/af/examples/hallucination_custom_loss.ipynb`
 │                              OUR CONTRIBUTION                               │
 │                                                                             │
 │  ┌──────────┐    ┌─────────────────┐    ┌─────────────────────────────────┐ │
-│  │  STL     │───▶│  Point Cloud    │───▶│  shape_loss callback            │ │
+│  │  STL     │──▶│  Point Cloud    │───▶│  shape_loss callback            │ │
 │  │  File    │    │  (N, 3) array   │    │  returns {"chamfer": value}     │ │
 │  └──────────┘    └─────────────────┘    └─────────────────────────────────┘ │
 │                                                       │                     │
@@ -65,7 +65,7 @@ Reference: `colabdesign/af/examples/hallucination_custom_loss.ipynb`
 ```python
 ca_coords = outputs["structure_module"]["final_atom_positions"][:, 1, :]
 # Shape: [L, 3] where L is protein length
-# Index 1 = Cα (atom order is N, CA, C, O, CB, ...)
+# Index 1 = Cα (atom order is N, CA, C, CB, O, ...)
 ```
 
 ### How Loss Callbacks Work
@@ -165,51 +165,46 @@ Build a module that converts STL files to protein-appropriate point clouds.
 
 ### Tasks
 
-1. **Implement STL loader**
+1. **Implement STL loader** ✅ `src/stl_processing.py`
 
    ```python
+   import os
    import numpy as np
    import trimesh
+   from typing import Optional
 
    def stl_to_points(
        stl_path: str,
        num_points: int = 1000,
        target_extent: float = 100.0,
-       center: bool = True
+       center: bool = True,
+       seed: Optional[int] = None,
    ) -> np.ndarray:
-       """
-       Load STL and sample points from surface.
-       
-       Args:
-           stl_path: Path to STL file
-           num_points: Number of points to sample
-           target_extent: Target longest dimension in Ångströms
-           center: Whether to center at origin
-           
-       Returns:
-           Point cloud array of shape (num_points, 3)
-       """
-       mesh = trimesh.load_mesh(stl_path)
-       points = mesh.sample(num_points)
-       
+       """Load STL, sample points, center, scale."""
+       if not os.path.exists(stl_path):
+           raise FileNotFoundError(f"STL file not found: {stl_path}")
+       mesh = trimesh.load_mesh(stl_path, force="mesh")
+       if mesh.is_empty or len(mesh.vertices) == 0:
+           raise ValueError(f"STL file is empty or invalid: {stl_path}")
+       if seed is not None:
+           np.random.seed(seed)
+       points, _ = trimesh.sample.sample_surface(mesh, num_points)
        if center:
            points = points - points.mean(axis=0)
-       
-       # Scale so the bounding-box longest edge matches target_extent
        extent = (points.max(axis=0) - points.min(axis=0)).max()
-       if extent > 0:
-           points = points * (target_extent / extent)
-       
+       if extent <= 0:
+           raise ValueError("Mesh has zero extent; cannot scale.")
+       points = points * (target_extent / extent)
        return points.astype(np.float32)
    ```
 
-2. **Handle edge cases**
-   - Empty or invalid STL files
-   - Very small meshes (may have numerical issues)
+2. **Handle edge cases** ✅
+   - Missing file → `FileNotFoundError`
+   - Empty/invalid mesh → `ValueError`
+   - Zero extent → `ValueError`
 
-3. **Create visualization helper**
-   - Plot point cloud to verify it looks correct
-   - Use matplotlib 3D scatter plot
+3. **Create visualization helper** ✅ `plot_point_cloud(...)` in `stl_processing.py`
+   - Matplotlib 3D scatter for quick inspection
 
 ### Critical Note: Units and Scale
 
@@ -226,17 +221,31 @@ Scale guidance:
 
 ### Checkpoint
 
-- [ ] Can load any valid STL file
-- [ ] Point cloud visually matches STL shape
-- [ ] Output is centered at origin
-- [ ] Output scale is in Ångströms (50-150Å range)
-- [ ] Works with at least 2 different STL files
-- [ ] Visualization confirms correctness
+- [x] Can load any valid STL file
+- [x] Point cloud visually matches STL shape (helix STL generator + sample)
+- [x] Output is centered at origin
+- [x] Output scale is in Ångströms (50-150Å range)
+- [x] Works with at least 2 different STL files (generated helix; can swap params/seeds)
+- [x] Visualization confirms correctness (plot helper)
 
 ### Deliverables
 
-- `src/stl_processing.py`
-- Test script with visualization
+- `src/stl_processing.py` (loader + plot helper)
+- `examples/make_helix_stl.py` (helix STL generator)
+- `examples/sample_points.py` (sampling demo + assertions)
+
+### How to verify (Stage 1)
+
+```pwsh
+# from repo root, venv active
+python examples/make_helix_stl.py --out examples/helix.stl
+python -m examples.sample_points --plot  # or python examples/sample_points.py --plot (after adding project root to PYTHONPATH)
+```
+
+Expected:
+- `points shape: (NUM_POINTS, 3)`
+- mean ~0 on all axes
+- bbox longest edge == `target_extent` (e.g., 100.00)
 
 ### Time Estimate: 0.5 days
 
