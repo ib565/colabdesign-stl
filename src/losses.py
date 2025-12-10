@@ -1,8 +1,9 @@
 """Differentiable loss utilities."""
 
-from typing import Tuple
+from typing import Callable, Tuple
 
 import jax.numpy as jnp
+import numpy as np
 
 
 def _pairwise_sq_dists(pred: jnp.ndarray, target: jnp.ndarray) -> jnp.ndarray:
@@ -64,4 +65,42 @@ def chamfer_distance(
         loss_target_to_pred = jnp.mean(jnp.min(sq_dist, axis=0))
 
     return loss_pred_to_target + loss_target_to_pred
+
+
+def make_shape_loss(
+    target_points: np.ndarray,
+    *,
+    use_sqrt: bool = False,
+) -> Callable:
+    """Create a Chamfer-based loss callback compatible with ColabDesign.
+
+    The callback extracts Cα coordinates from the Alphafold structure module
+    output, centers them, and computes Chamfer distance against the centered
+    target point cloud. Intended for hallucination protocol via
+    ``mk_afdesign_model(protocol="hallucination", loss_callback=...)``.
+
+    Args:
+        target_points: Target point cloud, shape (N, 3).
+        use_sqrt: Whether to use the sqrt variant of Chamfer for Å units.
+
+    Returns:
+        A callable ``loss_fn(inputs, outputs, aux) -> dict`` that returns
+        ``{"chamfer": loss}``.
+    """
+
+    target = jnp.asarray(target_points, dtype=jnp.float32)
+    _validate_points(target)
+    target_centered = target - target.mean(axis=0)
+
+    # Atom order: N=0, CA=1, C=2, O=3, CB=4, ...
+    CA_INDEX = 1
+
+    def shape_loss(inputs, outputs, aux):
+        positions = outputs["structure_module"]["final_atom_positions"]
+        ca = positions[:, CA_INDEX, :]
+        ca_centered = ca - ca.mean(axis=0)
+        loss = chamfer_distance(ca_centered, target_centered, use_sqrt=use_sqrt)
+        return {"chamfer": loss}
+
+    return shape_loss
 

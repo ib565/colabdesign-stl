@@ -1,8 +1,13 @@
 import argparse
 import numpy as np
-
+import sys
+from pathlib import Path
 from src.stl_processing import plot_point_cloud, stl_to_points
 
+# Ensure project root is on PYTHONPATH when running as a script
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 def main() -> None:
     parser = argparse.ArgumentParser()

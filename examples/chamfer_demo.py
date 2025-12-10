@@ -7,6 +7,12 @@ Run:
 
 import jax
 import jax.numpy as jnp
+import sys
+from pathlib import Path
+# Ensure project root is on PYTHONPATH when running as a script
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from src.losses import chamfer_distance
 
