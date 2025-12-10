@@ -39,7 +39,7 @@ def _mk_model(
     seed: int,
 ):
     try:
-        from colabdesign import mk_afdesign_model
+        from colabdesign import mk_afdesign_model  # pyright: ignore[reportMissingImports]
     except ImportError as exc:
         print(
             "colabdesign is required for this demo. Install it or run in Colab.",
