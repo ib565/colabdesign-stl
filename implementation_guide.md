@@ -257,6 +257,8 @@ Expected:
 
 Implement a differentiable Chamfer distance loss in JAX.
 
+**Implemented:** `src/losses.py` with `chamfer_distance(..., use_sqrt=False)` (squared by default for speed; optional `use_sqrt=True` for interpretable Å). Tests in `tests/test_losses.py` cover identical/offset clouds, gradients via `jax.grad`, sqrt path, and input validation. Requirements now include `jax==0.4.34` and `pytest`.
+
 ### Tasks
 
 1. **Implement Chamfer distance**
@@ -317,16 +319,17 @@ loss_target_to_pred = jnp.mean(jnp.sqrt(jnp.min(sq_dist, axis=0) + 1e-8))
 
 ### Checkpoint
 
-- [ ] Loss function runs without errors
-- [ ] `jax.grad()` works on it
-- [ ] Loss = 0 for identical point clouds
-- [ ] Loss > 0 for different point clouds
-- [ ] Loss decreases as points approach target (gradient check)
+- [x] Loss function runs without errors (unit tests)
+- [x] `jax.grad()` works on it (covered in tests)
+- [x] Loss = 0 for identical point clouds (covered in tests)
+- [x] Loss > 0 for different point clouds (covered in tests)
+- [x] Loss decreases as points approach target (gradient check via grad test)
 
 ### Deliverables
 
 - `src/losses.py`
-- Test script demonstrating behavior
+- `tests/test_losses.py`
+- `examples/chamfer_demo.py` (optional quick demo)
 
 ### Time Estimate: 0.25 days
 

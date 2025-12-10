@@ -1,4 +1,6 @@
 numpy
 trimesh
 matplotlib
+jax==0.4.34
+pytest
 
