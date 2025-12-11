@@ -7,7 +7,7 @@ single class plus convenience plotting utilities.
 
 import os
 from pathlib import Path
-from typing import Dict, Optional, Sequence
+from typing import Dict, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -24,6 +24,45 @@ def _resolve_data_dir(user_dir: Optional[str]) -> Optional[Path]:
         return Path(env_var)
     env_dir = Path.cwd().parent / "ColabDesign"
     return env_dir if env_dir.exists() else None
+
+
+def _kabsch_align_np(pred: np.ndarray, target: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Align pred onto target using NumPy Kabsch; returns (pred_aligned, target_centered)."""
+    pred = np.asarray(pred, dtype=np.float32)
+    target = np.asarray(target, dtype=np.float32)
+
+    pred_centered = pred - pred.mean(axis=0)
+    target_centered = target - target.mean(axis=0)
+
+    h = pred_centered.T @ target_centered
+    u, _, vt = np.linalg.svd(h)
+    r = vt.T @ u.T
+
+    if np.linalg.det(r) < 0:
+        vt[-1, :] *= -1
+        r = vt.T @ u.T
+
+    pred_aligned = pred_centered @ r
+    return pred_aligned.astype(np.float32), target_centered.astype(np.float32)
+
+
+def _chamfer_np(
+    pred: np.ndarray, target: np.ndarray, *, use_sqrt: bool = False, eps: float = 1e-8
+) -> float:
+    """Chamfer distance (NumPy) between two point clouds."""
+    pred = np.asarray(pred, dtype=np.float32)
+    target = np.asarray(target, dtype=np.float32)
+    diff = pred[:, None, :] - target[None, :, :]
+    sq = np.sum(diff * diff, axis=-1)
+
+    if use_sqrt:
+        loss_pred_to_target = np.mean(np.sqrt(np.min(sq, axis=1) + eps))
+        loss_target_to_pred = np.mean(np.sqrt(np.min(sq, axis=0) + eps))
+    else:
+        loss_pred_to_target = np.mean(np.min(sq, axis=1))
+        loss_target_to_pred = np.mean(np.min(sq, axis=0))
+
+    return float(loss_pred_to_target + loss_target_to_pred)
 
 
 class STLProteinDesigner:
@@ -89,6 +128,7 @@ class STLProteinDesigner:
             protocol="hallucination",
             loss_callback=loss_fn,
             data_dir=resolved_data_dir,
+            
         )
         if not getattr(self.model, "_model_names", []):
             raise RuntimeError(
@@ -111,6 +151,7 @@ class STLProteinDesigner:
 
         self.model.prep_inputs(length=protein_length)
         self.verbose = verbose
+        self.use_sqrt = use_sqrt
 
     # ------------------------------------------------------------------ #
     # Public API
@@ -150,14 +191,25 @@ class STLProteinDesigner:
             self.model._tmp.get("best", {}).get("aux", {}).get("log")  # pyright: ignore[reportPrivateUsage]
             or self.model.aux.get("log", {})
         )
-        return {
+        metrics = {
             "chamfer": float(log.get("chamfer", float("nan"))),
             "plddt": float(log.get("plddt", float("nan"))),
             "pae": float(log.get("pae", float("nan"))),
         }
 
-    def get_ca_coords(self, get_best: bool = True) -> np.ndarray:
-        """Return centered Cα coordinates from the best or latest structure."""
+        try:
+            ca = self.get_ca_coords(get_best=True, aligned=False)
+            ca_aligned, target_centered = _kabsch_align_np(ca, self.target_points)
+            metrics["chamfer_aligned"] = _chamfer_np(
+                ca_aligned, target_centered, use_sqrt=self.use_sqrt
+            )
+        except Exception:
+            metrics["chamfer_aligned"] = float("nan")
+
+        return metrics
+
+    def get_ca_coords(self, get_best: bool = True, aligned: bool = False) -> np.ndarray:
+        """Return Cα coordinates (aligned via Kabsch if requested)."""
         aux = self.model._tmp.get("best", {}).get("aux") if get_best else self.model.aux  # pyright: ignore[reportPrivateUsage]
         if aux is None:
             raise RuntimeError("No auxiliary data available; run design() first.")
@@ -173,6 +225,9 @@ class STLProteinDesigner:
         if atom_positions.ndim == 4:
             atom_positions = atom_positions[0]
         ca = np.asarray(atom_positions)[:, 1, :]  # CA index = 1
+        if aligned:
+            ca_aligned, _ = _kabsch_align_np(ca, self.target_points)
+            return ca_aligned
         return ca - ca.mean(axis=0)
 
     # ------------------------------------------------------------------ #
@@ -187,7 +242,7 @@ class STLProteinDesigner:
         title: str = "Target vs predicted Cα",
     ) -> None:
         """Plot target point cloud vs predicted Cα coordinates."""
-        pred_ca = self.get_ca_coords(get_best=get_best)
+        pred_ca = self.get_ca_coords(get_best=get_best, aligned=True)
         plot_point_cloud(pred_ca, target=self.target_points, title=title, save_path=save_path, show=show)
 
 

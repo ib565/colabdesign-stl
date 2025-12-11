@@ -354,7 +354,7 @@ Wire the STL processing and loss function into ColabDesign's hallucination proto
    Implemented in `src/losses.py` as `make_shape_loss()`:
    ```python
    def make_shape_loss(target_points: np.ndarray, *, use_sqrt: bool = False) -> Callable:
-       """Create a Chamfer-based loss callback compatible with ColabDesign."""
+       """Create a Kabsch-aligned Chamfer callback compatible with ColabDesign."""
        target = jnp.asarray(target_points, dtype=jnp.float32)
        target_centered = target - target.mean(axis=0)
        
@@ -364,7 +364,8 @@ Wire the STL processing and loss function into ColabDesign's hallucination proto
            positions = outputs["structure_module"]["final_atom_positions"]
            ca = positions[:, CA_INDEX, :]
            ca_centered = ca - ca.mean(axis=0)
-           loss = chamfer_distance(ca_centered, target_centered, use_sqrt=use_sqrt)
+           ca_aligned = _kabsch_align(ca_centered, target_centered)
+           loss = chamfer_distance(ca_aligned, target_centered, use_sqrt=use_sqrt)
            return {"chamfer": loss}
        
        return shape_loss
@@ -444,6 +445,7 @@ Expected output:
 - Requires AlphaFold params in `../ColabDesign/params/`
 - First JIT compile takes 1-3 minutes (CPU) or ~30s (GPU)
 - Uses `design_3stage()` instead of `design()` for better results (logits→soft→hard annealing)
+- Chamfer is rotation/translation-invariant via Kabsch on Cα; scale still follows `target_extent`.
 
 #### Time Estimate: 0.5 days (completed)
 

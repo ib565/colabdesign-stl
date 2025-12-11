@@ -2,6 +2,7 @@
 
 from typing import Callable, Tuple
 
+from jax import lax
 import jax.numpy as jnp
 import numpy as np
 
@@ -67,6 +68,23 @@ def chamfer_distance(
     return loss_pred_to_target + loss_target_to_pred
 
 
+def _kabsch_align(pred: jnp.ndarray, target: jnp.ndarray) -> jnp.ndarray:
+    """Align ``pred`` onto ``target`` via Kabsch (proper rotation only).
+
+    Both inputs must be mean-centered before calling.
+    """
+    h = pred.T @ target
+    u, _, vt = jnp.linalg.svd(h)
+    r = vt.T @ u.T
+
+    def _flip_last_row(_: None) -> jnp.ndarray:
+        vt_fixed = vt.at[-1, :].set(-vt[-1, :])
+        return vt_fixed.T @ u.T
+
+    r = lax.cond(jnp.linalg.det(r) < 0, _flip_last_row, lambda _: r, operand=None)
+    return pred @ r
+
+
 def make_shape_loss(
     target_points: np.ndarray,
     *,
@@ -99,7 +117,8 @@ def make_shape_loss(
         positions = outputs["structure_module"]["final_atom_positions"]
         ca = positions[:, CA_INDEX, :]
         ca_centered = ca - ca.mean(axis=0)
-        loss = chamfer_distance(ca_centered, target_centered, use_sqrt=use_sqrt)
+        ca_aligned = _kabsch_align(ca_centered, target_centered)
+        loss = chamfer_distance(ca_aligned, target_centered, use_sqrt=use_sqrt)
         return {"chamfer": loss}
 
     return shape_loss
