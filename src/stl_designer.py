@@ -149,9 +149,17 @@ class STLProteinDesigner:
         aux = self.model._tmp.get("best", {}).get("aux") if get_best else self.model.aux  # pyright: ignore[reportPrivateUsage]
         if aux is None:
             raise RuntimeError("No auxiliary data available; run design() first.")
-        atom_positions = aux.get("atom_positions") or aux.get("all", {}).get("atom_positions")
+        atom_positions = aux.get("atom_positions")
+        if atom_positions is None:
+            all_aux = aux.get("all")
+            if all_aux is not None and "atom_positions" in all_aux:
+                atom_positions = all_aux["atom_positions"]
         if atom_positions is None:
             raise RuntimeError("Atom positions not found in model outputs.")
+        # If stacked across models, take the first entry.
+        atom_positions = np.asarray(atom_positions)
+        if atom_positions.ndim == 4:
+            atom_positions = atom_positions[0]
         ca = np.asarray(atom_positions)[:, 1, :]  # CA index = 1
         return ca - ca.mean(axis=0)
 
