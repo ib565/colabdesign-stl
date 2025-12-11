@@ -73,6 +73,8 @@ def _kabsch_align(pred: jnp.ndarray, target: jnp.ndarray) -> jnp.ndarray:
 
     Both inputs must be mean-centered before calling.
     """
+    pred = jnp.asarray(pred, dtype=jnp.float32)
+    target = jnp.asarray(target, dtype=jnp.float32)
     h = pred.T @ target
     u, _, vt = jnp.linalg.svd(h, full_matrices=False)
     r = vt.T @ u.T
@@ -82,7 +84,7 @@ def _kabsch_align(pred: jnp.ndarray, target: jnp.ndarray) -> jnp.ndarray:
         return vt_fixed.T @ u.T
 
     r = lax.cond(jnp.linalg.det(r) < 0, _flip_last_row, lambda _: r, operand=None)
-    return pred @ r
+    return pred @ r.T
 
 
 def make_shape_loss(

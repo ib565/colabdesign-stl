@@ -42,7 +42,7 @@ def _kabsch_align_np(pred: np.ndarray, target: np.ndarray) -> Tuple[np.ndarray, 
         vt[-1, :] *= -1
         r = vt.T @ u.T
 
-    pred_aligned = pred_centered @ r
+    pred_aligned = pred_centered @ r.T
     return pred_aligned.astype(np.float32), target_centered.astype(np.float32)
 
 
