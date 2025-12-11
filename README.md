@@ -6,7 +6,7 @@ Design proteins to approximate arbitrary STL shapes by integrating custom shape 
 - Stage 1 (STL processing) ✅
 - Stage 2 (Chamfer loss in JAX) ✅
 - Stage 3a (ColabDesign loss callback + smoke demo) ✅
-- Next: Stage 3b (full STL designer + notebook)
+- Stage 3b (STLProteinDesigner + CLI) ✅
 
 ## Requirements
 - Python 3.13
@@ -86,6 +86,56 @@ What to expect:
   python examples\minimal_chamfer_hallucination.py --iters 10 --length 50
   ```
 - If weights are missing, you’ll see warnings like `'model_*_ptm' not found` and `AssertionError: no model params defined`.
+
+## Stage 3b: Full STL integration (STLProteinDesigner)
+Run end-to-end from an STL file, saving sequence, PDB, and optional overlay plot:
+```pwsh
+# From repo root, venv active
+python examples/design_from_stl.py --stl examples/helix.stl `
+  --length 100 --num-points 1000 --target-extent 100 `
+  --soft-iters 200 --temp-iters 100 --hard-iters 20 `
+  --chamfer-weight 1.0 --plddt 0.1 --pae 0.05 `
+  --sample-seed 0 --run-seed 0 --data-dir ..\ColabDesign `
+  --out-dir outputs\helix --plot
+```
+Outputs:
+- `outputs/helix/sequence.txt`
+- `outputs/helix/structure.pdb`
+- `outputs/helix/overlay.png` (target points vs predicted Cα)
+
+Key flags:
+- `--sample-seed`: controls STL surface sampling (default 0 for reproducibility; set to -1 for stochastic).
+- `--run-seed`: controls the Gumbel restart in ColabDesign.
+- `--use-sqrt`: switch to sqrt Chamfer if you want Å-scale values in logs (slightly slower).
+- `--data-dir`: path to AlphaFold params (falls back to `AF_DATA_DIR` or `../ColabDesign` if present).
+
+Programmatic use:
+```python
+from src import STLProteinDesigner
+
+designer = STLProteinDesigner(
+    stl_path="examples/helix.stl",
+    protein_length=100,
+    num_target_points=1000,
+    target_extent=100.0,
+    sample_seed=0,
+    chamfer_weight=1.0,
+    plddt_weight=0.1,
+    pae_weight=0.05,
+    use_sqrt=False,
+    data_dir="../ColabDesign",
+)
+seq = designer.design(soft_iters=200, temp_iters=100, hard_iters=20, run_seed=0)
+pdb_str = designer.get_structure()
+metrics = designer.get_metrics()
+designer.plot_overlay(save_path="overlay.png", show=False)
+print(seq[:60], metrics)
+```
+
+Notes:
+- First JIT compile still takes 1–3 minutes on CPU; GPU is recommended.
+- Chamfer is squared by default for speed; use `--use-sqrt` for Å units.
+- `design_3stage` is used for better convergence on hallucination.
 
 ## Files
 - `src/stl_processing.py` — STL loader (`stl_to_points`) + `plot_point_cloud`.
