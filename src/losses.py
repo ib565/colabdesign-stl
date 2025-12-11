@@ -74,7 +74,7 @@ def _kabsch_align(pred: jnp.ndarray, target: jnp.ndarray) -> jnp.ndarray:
     Both inputs must be mean-centered before calling.
     """
     h = pred.T @ target
-    u, _, vt = jnp.linalg.svd(h)
+    u, _, vt = jnp.linalg.svd(h, full_matrices=False)
     r = vt.T @ u.T
 
     def _flip_last_row(_: None) -> jnp.ndarray:
