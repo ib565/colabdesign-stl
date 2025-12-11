@@ -185,6 +185,44 @@ class STLProteinDesigner:
             Path(save_path).write_text(pdb_str)
         return pdb_str
 
+    def debug_aux_structure(self) -> Dict[str, any]:
+        """Debug helper to inspect aux data structure."""
+        info = {}
+        
+        # Check _tmp["best"]
+        best = self.model._tmp.get("best", {})  # pyright: ignore[reportPrivateUsage]
+        info["has_best"] = bool(best)
+        if best:
+            info["best_keys"] = list(best.keys())
+            best_aux = best.get("aux", {})
+            info["best_aux_keys"] = list(best_aux.keys()) if best_aux else []
+            if "log" in best_aux:
+                info["best_log"] = dict(best_aux["log"])
+            if "plddt" in best_aux:
+                plddt = np.asarray(best_aux["plddt"])
+                info["best_plddt_shape"] = plddt.shape
+                info["best_plddt_mean"] = float(plddt.mean())
+            if "atom_positions" in best_aux:
+                pos = np.asarray(best_aux["atom_positions"])
+                info["best_atom_positions_shape"] = pos.shape
+        
+        # Check current aux
+        aux = self.model.aux
+        info["has_aux"] = bool(aux)
+        if aux:
+            info["aux_keys"] = list(aux.keys())
+            if "log" in aux:
+                info["aux_log"] = dict(aux["log"])
+            if "plddt" in aux:
+                plddt = np.asarray(aux["plddt"])
+                info["aux_plddt_shape"] = plddt.shape
+                info["aux_plddt_mean"] = float(plddt.mean())
+            if "atom_positions" in aux:
+                pos = np.asarray(aux["atom_positions"])
+                info["aux_atom_positions_shape"] = pos.shape
+        
+        return info
+
     def get_metrics(self) -> Dict[str, float]:
         """Return final (best if available) metrics.
         
@@ -221,6 +259,7 @@ class STLProteinDesigner:
                         # Multi-model: get best model's pLDDT
                         best_idx = self._get_best_model_index(aux)
                         metrics["plddt_recomputed"] = float(plddt[best_idx].mean())
+                        metrics["_best_model_idx"] = best_idx
                     elif plddt.ndim == 1:
                         metrics["plddt_recomputed"] = float(plddt.mean())
         except Exception as e:
