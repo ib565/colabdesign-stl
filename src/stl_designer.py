@@ -12,7 +12,7 @@ from typing import Dict, Optional, Sequence
 import numpy as np
 
 from .losses import make_shape_loss
-from .stl_processing import plot_point_cloud, stl_to_points
+from .stl_processing import normalize_points, plot_point_cloud, stl_to_points
 
 
 def _resolve_data_dir(user_dir: Optional[str]) -> Optional[Path]:
@@ -31,7 +31,8 @@ class STLProteinDesigner:
 
     def __init__(
         self,
-        stl_path: str,
+        stl_path: Optional[str] = None,
+        target_points: Optional[np.ndarray] = None,
         *,
         protein_length: int = 100,
         num_target_points: int = 1000,
@@ -52,18 +53,29 @@ class STLProteinDesigner:
                 "colabdesign is required. Install it (e.g., `pip install -e ../ColabDesign`)."
             ) from exc
 
-        self.stl_path = Path(stl_path)
-        if not self.stl_path.exists():
-            raise FileNotFoundError(f"STL not found: {self.stl_path}")
+        if stl_path is None and target_points is None:
+            raise ValueError("Provide either stl_path or target_points.")
+        if stl_path is not None and target_points is not None:
+            raise ValueError("Provide only one of stl_path or target_points, not both.")
 
-        # Load target point cloud (deterministic by default for reproducibility).
-        self.target_points = stl_to_points(
-            str(self.stl_path),
-            num_points=num_target_points,
-            target_extent=target_extent,
-            center=center,
-            seed=sample_seed,
-        )
+        self.stl_path = Path(stl_path) if stl_path is not None else None
+
+        # Load or normalize target point cloud.
+        if self.stl_path is not None:
+            if not self.stl_path.exists():
+                raise FileNotFoundError(f"STL not found: {self.stl_path}")
+            self.target_points = stl_to_points(
+                str(self.stl_path),
+                num_points=num_target_points,
+                target_extent=target_extent,
+                center=center,
+                seed=sample_seed,
+            )
+        else:
+            pts = np.asarray(target_points, dtype=np.float32)
+            self.target_points = normalize_points(
+                pts, target_extent=target_extent, center=center
+            )
 
         loss_fn = make_shape_loss(self.target_points, use_sqrt=use_sqrt)
 
