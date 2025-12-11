@@ -140,7 +140,7 @@ class STLProteinDesigner:
         weights.update(
             {
                 "chamfer": chamfer_weight,
-                "con": weights.get("con", 0.7),
+                "con": weights.get("con", 0.8),
                 "i_con": weights.get("i_con", 0.0),
                 "plddt": plddt_weight,
                 "pae": pae_weight,
