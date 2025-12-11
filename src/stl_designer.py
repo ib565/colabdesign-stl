@@ -186,33 +186,83 @@ class STLProteinDesigner:
         return pdb_str
 
     def get_metrics(self) -> Dict[str, float]:
-        """Return final (best if available) metrics."""
-        log = (
-            self.model._tmp.get("best", {}).get("aux", {}).get("log")  # pyright: ignore[reportPrivateUsage]
-            or self.model.aux.get("log", {})
-        )
+        """Return final (best if available) metrics.
+        
+        Returns metrics from the saved best checkpoint. Also recomputes
+        chamfer_aligned from the actual CA coordinates for verification.
+        """
+        # Try to get log from best checkpoint, fall back to current aux
+        best_aux = self.model._tmp.get("best", {}).get("aux", {})  # pyright: ignore[reportPrivateUsage]
+        log = best_aux.get("log") if best_aux else None
+        if not log:
+            log = self.model.aux.get("log", {}) if self.model.aux else {}
+        
         metrics = {
             "chamfer": float(log.get("chamfer", float("nan"))),
             "plddt": float(log.get("plddt", float("nan"))),
             "pae": float(log.get("pae", float("nan"))),
         }
 
+        # Recompute chamfer from actual CA coordinates for verification
         try:
             ca = self.get_ca_coords(get_best=True, aligned=False)
             ca_aligned, target_centered = _kabsch_align_np(ca, self.target_points)
             metrics["chamfer_aligned"] = _chamfer_np(
                 ca_aligned, target_centered, use_sqrt=self.use_sqrt
             )
-        except Exception:
+            
+            # Also compute pLDDT directly from coordinates if available
+            aux = self.model._tmp.get("best", {}).get("aux") or self.model.aux  # pyright: ignore[reportPrivateUsage]
+            if aux:
+                plddt = aux.get("plddt")
+                if plddt is not None:
+                    plddt = np.asarray(plddt)
+                    if plddt.ndim == 2:
+                        # Multi-model: get best model's pLDDT
+                        best_idx = self._get_best_model_index(aux)
+                        metrics["plddt_recomputed"] = float(plddt[best_idx].mean())
+                    elif plddt.ndim == 1:
+                        metrics["plddt_recomputed"] = float(plddt.mean())
+        except Exception as e:
             metrics["chamfer_aligned"] = float("nan")
+            metrics["_error"] = str(e)
 
         return metrics
+
+    def _get_best_model_index(self, aux: dict) -> int:
+        """Determine the best model index from aux data using pLDDT scores."""
+        # Try to get pLDDT scores per model
+        plddt = aux.get("plddt")
+        if plddt is not None:
+            plddt = np.asarray(plddt)
+            if plddt.ndim == 2:  # (num_models, seq_len)
+                # Average pLDDT per model, pick highest
+                return int(np.argmax(plddt.mean(axis=1)))
+            elif plddt.ndim == 1:
+                return 0  # Single model
+        
+        # Fallback: check atom_positions shape and use model 0
+        atom_positions = aux.get("atom_positions")
+        if atom_positions is not None:
+            atom_positions = np.asarray(atom_positions)
+            if atom_positions.ndim == 4:
+                # Try to use per-model pLDDT from "all" sub-dict
+                all_aux = aux.get("all", {})
+                if "plddt" in all_aux:
+                    plddt_all = np.asarray(all_aux["plddt"])
+                    if plddt_all.ndim == 2:
+                        return int(np.argmax(plddt_all.mean(axis=1)))
+        return 0
 
     def get_ca_coords(self, get_best: bool = True, aligned: bool = False) -> np.ndarray:
         """Return Cα coordinates (aligned via Kabsch if requested)."""
         aux = self.model._tmp.get("best", {}).get("aux") if get_best else self.model.aux  # pyright: ignore[reportPrivateUsage]
+        if aux is None or not aux:
+            # Fallback to current aux if best not available
+            aux = self.model.aux
         if aux is None:
             raise RuntimeError("No auxiliary data available; run design() first.")
+        
         atom_positions = aux.get("atom_positions")
         if atom_positions is None:
             all_aux = aux.get("all")
@@ -220,10 +270,14 @@ class STLProteinDesigner:
                 atom_positions = all_aux["atom_positions"]
         if atom_positions is None:
             raise RuntimeError("Atom positions not found in model outputs.")
-        # If stacked across models, take the first entry.
+        
         atom_positions = np.asarray(atom_positions)
+        
+        # If stacked across models, select the best model (not just [0])
         if atom_positions.ndim == 4:
-            atom_positions = atom_positions[0]
+            best_idx = self._get_best_model_index(aux)
+            atom_positions = atom_positions[best_idx]
+        
         ca = np.asarray(atom_positions)[:, 1, :]  # CA index = 1
         if aligned:
             ca_aligned, _ = _kabsch_align_np(ca, self.target_points)
