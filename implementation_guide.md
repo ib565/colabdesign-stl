@@ -2,7 +2,7 @@
 
 ## Project Goal
 
-Extend ColabDesign AF to accept an STL file as input and design a protein sequence whose predicted structure approximates the STL shape.
+Extend ColabDesign AF to accept an STL file as input and design a protein sequence whose predicted structure approximates the STL shape. Current state: STL processing, Chamfer loss, Kabsch-aligned loss callback, STLProteinDesigner, and alignment sanity tests/scripts are in place. Kabsch rotation application is fixed (use `pred @ R.T`).
 
 ---
 
@@ -257,7 +257,7 @@ Expected:
 
 Implement a differentiable Chamfer distance loss in JAX.
 
-**Implemented:** `src/losses.py` with `chamfer_distance(..., use_sqrt=False)` (squared by default for speed; optional `use_sqrt=True` for interpretable Å). Tests in `tests/test_losses.py` cover identical/offset clouds, gradients via `jax.grad`, sqrt path, and input validation. Requirements now include `jax==0.4.34` and `pytest`.
+**Implemented:** `src/losses.py` with `chamfer_distance(..., use_sqrt=False)` (squared by default for speed; optional `use_sqrt=True` for interpretable Å). Kabsch rotation application is fixed (`pred @ R.T` after SVD). Tests in `tests/test_losses.py` cover identical/offset clouds, gradients via `jax.grad`, sqrt path, and input validation. Alignment sanity tests live in `tests/test_alignment_sanity.py`. Requirements now include `jax==0.4.34` and `pytest`.
 
 ### Tasks
 
@@ -536,8 +536,8 @@ Expected output:
    - Extract sequence and structure
 
 3. **Add visualization**
-   - Plot target points vs predicted Cα positions
-   - Use matplotlib 3D scatter or py3Dmol
+   - Plot target points vs predicted Cα positions (`plot_overlay` in `stl_designer.py`)
+   - Uses centered + Kabsch-aligned coordinates; py3Dmol optional
 
 #### Checkpoint
 
@@ -642,6 +642,7 @@ Verify the system works and characterize its behavior.
 - [ ] pLDDT > 50
 - [ ] Visual inspection shows reasonable shape match
 - [ ] Result saved as image
+- [ ] Alignment sanity script/tests pass (Kabsch correctness)
 
 ### Post-MVP Validation (If Time Permits)
 
@@ -981,6 +982,18 @@ ca_from_outputs = outputs["structure_module"]["final_atom_positions"][:, 1, :]
 
 # Should be very close (within floating point tolerance)
 ```
+
+### Alignment Sanity (Kabsch + centering)
+```pwsh
+python examples/alignment_sanity.py
+# or
+pytest tests/test_alignment_sanity.py
+# Expect chamfer ≈ 2e-4 and RMSD ≈ 1e-6 (float32 noise)
+```
+
+Notes on Kabsch:
+- Rotation from SVD (`R = Vt.T @ U.T`) is for left-multiplication; when applying on the right, use `pred @ R.T`.
+- Planar/collinear point sets have rotational ambiguity around the degenerate axis; near-zero residuals with ~1e-3 tolerance are expected.
 
 ---
 

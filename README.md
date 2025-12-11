@@ -1,12 +1,13 @@
 # ColabDesign STL Extension
 
-Design proteins to approximate arbitrary STL shapes by integrating custom shape losses into ColabDesign. This repo adds STL → point-cloud preprocessing (Stage 1) and a differentiable Chamfer loss (Stage 2) for downstream integration.
+Design proteins to approximate arbitrary STL shapes by integrating custom shape losses into ColabDesign. This repo adds STL → point-cloud preprocessing, a Kabsch-aligned Chamfer loss, and a small API/CLI for end-to-end runs.
 
 ## Status
-- Stage 1 (STL processing) ✅
-- Stage 2 (Chamfer loss in JAX) ✅
-- Stage 3a (ColabDesign loss callback + smoke demo) ✅
-- Stage 3b (STLProteinDesigner + CLI) ✅
+- STL processing ✅
+- Chamfer loss (JAX) ✅
+- Kabsch alignment fix applied ✅ (pred @ R.T)
+- STLProteinDesigner + CLI ✅
+- Alignment sanity checks (tests + script) ✅
 
 ## Requirements
 - Python 3.13
@@ -36,12 +37,18 @@ Notes:
 - Use `--seed` to make sampling deterministic.
 - If running `python examples/sample_points.py` directly, ensure project root is on `PYTHONPATH` or add `sys.path` tweak.
 
-## Tests (Stage 2)
-Run Chamfer-loss unit tests (gradients, correctness, validation):
+## Tests
+Run unit tests (Chamfer + Kabsch + alignment sanity):
 ```pwsh
-python -m pytest tests/test_losses.py
+python -m pytest
 ```
-Default Chamfer uses squared distances for speed; pass `use_sqrt=True` for interpretable Å units at slight cost.
+Default Chamfer uses squared distances for speed; pass `use_sqrt=True` for interpretable Å units.
+
+Alignment sanity checks (Kabsch + centering):
+```pwsh
+python examples/alignment_sanity.py
+```
+Expected: Chamfer and RMSD ~2e-4 or below (float32 noise).
 
 Quick demo (Stage 2):
 ```pwsh
@@ -136,19 +143,22 @@ Notes:
 - First JIT compile still takes 1–3 minutes on CPU; GPU is recommended.
 - Chamfer is squared by default for speed; use `--use-sqrt` for Å units.
 - `design_3stage` is used for better convergence on hallucination.
+- Kabsch alignment is applied after centering both target and predicted Cα; scale is not normalized beyond your `target_extent`.
 
 ## Files
 - `src/stl_processing.py` — STL loader (`stl_to_points`) + `plot_point_cloud`.
-- `src/losses.py` — JAX Chamfer distance (`chamfer_distance`) and `make_shape_loss`.
-- `tests/test_losses.py` — Unit tests for Chamfer distance and gradients.
+- `src/losses.py` — JAX Chamfer distance (`chamfer_distance`), `make_shape_loss`, Kabsch alignment.
+- `src/stl_designer.py` — `STLProteinDesigner` orchestrator, overlay plotting.
+- `tests/test_losses.py` — Chamfer unit tests and gradients.
+- `tests/test_alignment_sanity.py` — Kabsch + centering sanity checks.
+- `examples/alignment_sanity.py` — Quick CLI for alignment sanity.
 - `examples/chamfer_demo.py` — Minimal Chamfer usage + gradient printout.
 - `examples/make_helix_stl.py` — procedural helix STL generator.
-- `examples/sample_points.py` — sampling demo with simple assertions.
-- `examples/minimal_chamfer_hallucination.py` — Stage 3a smoke test for shape loss.
+- `examples/sample_points.py` — sampling demo with assertions.
+- `examples/minimal_chamfer_hallucination.py` — Stage 3a smoke test.
 - `requirements.txt` — numpy, trimesh, matplotlib, jax, pytest.
 
 ## Next steps (roadmap)
-- Stage 3b: Full STL integration (`STLProteinDesigner` class + end-to-end design script)
 - Stage 3c: Verification (Cα coordinate matching, centering checks, multi-seed testing)
 - Stage 4: Validation with real STL shapes (helix, ellipsoid, etc.)
 
