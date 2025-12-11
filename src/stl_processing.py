@@ -43,6 +43,28 @@ def normalize_points(
     pts = pts * (target_extent / extent)
     return pts.astype(np.float32)
 
+def make_hairpin_path(
+    num_points: int = 80,
+    height: float = 25.0,
+    turn_radius: float = 8.0,
+) -> np.ndarray:
+    n_third = num_points // 3
+    
+    seg1_z = np.linspace(0, height, n_third)
+    seg1_x = np.zeros(n_third)
+    
+    theta = np.linspace(0, np.pi, n_third)
+    turn_x = turn_radius * (1 - np.cos(theta))
+    turn_z = height + turn_radius * np.sin(theta)
+    
+    seg2_z = np.linspace(height, 0, num_points - 2 * n_third)
+    seg2_x = np.full(num_points - 2 * n_third, 2 * turn_radius)
+    
+    x = np.concatenate([seg1_x, turn_x, seg2_x])
+    z = np.concatenate([seg1_z, turn_z, seg2_z])
+    y = np.zeros(num_points)
+    
+    return np.stack([x, y, z], axis=1).astype(np.float32)
 
 def make_helix_path(
     num_points: int = 100,
