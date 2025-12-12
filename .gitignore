@@ -12,6 +12,5 @@ __pycache__/
 *.pyzw
 *.pyz
 *.pywz
-*.stl
 
 .env
