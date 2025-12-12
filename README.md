@@ -74,6 +74,22 @@ A helical tube with one complete turn (tests 3D helical centerline extraction).
 
 **Metrics:** See `results/metrics.csv` for quantitative results.
 
+## Results
+
+Quantitative metrics for the three example shapes:
+
+| Shape | Path Loss (Å²) | pLDDT | PAE |
+|-------|----------------|-------|-----|
+| Cylinder | 39.38 | 0.60 | 0.57 |
+| Sine Tube | 58.81 | 0.79 | 0.53 |
+| Helix Tube | 55.05 | 0.79 | 0.57 |
+
+**Settings:** `PROTEIN_LENGTH=80`, `PATH_WEIGHT=0.02`, `SOFT_ITERS=300`, `TEMP_ITERS=150`, `HARD_ITERS=20`
+
+**Trade-off:** There is an emergent trade-off between shape matching (path loss) and structure quality (pLDDT).
+
+See `results/metrics.csv` for full details.
+
 ## How It Works
 
 1. **STL Processing**: Load STL mesh → sample surface points → extract centerline via PCA + binning

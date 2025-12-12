@@ -95,45 +95,27 @@ def make_path_loss(target_points: np.ndarray) -> Callable:
 - Works well for cylinders, helices, sine tubes
 - No external dependencies beyond trimesh
 
-**Algorithm:**
+**Algorithm:** Surface sampling → PCA canonicalization (with extent-based axis selection for stability) → binning along principal axis → smoothing → arclength resampling → optional scaling.
 
-1. **Surface Sampling:** Sample many points from STL surface (default: 10,000)
-2. **PCA Canonicalization:** 
-   - Center points
-   - Compute PCA to find principal axes
-   - Rotate into PCA frame (columns = principal directions)
-   - Use extent-based axis selection (longest dimension) for stability
-3. **Binning:**
-   - Bin points along principal axis (default: `4 * num_points` bins)
-   - Compute centroid per bin
-   - Handle empty bins via linear interpolation
-4. **Smoothing:** Apply moving average (default window: 5)
-5. **Resampling:** Uniformly resample by arclength to exactly `num_points`
-6. **Optional Scaling:** Scale to target arclength if specified
 
 **Key Parameters:**
-- `surface_samples`: More samples = more accurate centerline (but slower)
-- `bins`: More bins = finer detail (default: `4 * num_points`)
-- `smooth_window`: Larger window = smoother centerline (default: 5)
+- `surface_samples`: Default 10,000 (10,000-12,000 recommended for typical shapes)
+- `bins`: Default `4 * num_points` (automatic)
+- `smooth_window`: Default 5
+
 
 **Limitations:**
 - Assumes roughly cylindrical cross-sections
 - May fail on complex geometries (branches, sharp corners)
-- PCA can be ambiguous for symmetric shapes (handled via extent-based selection)
+- PCA can be ambiguous for symmetric shapes
 
 **Code:** `src/stl_processing.py::stl_to_centerline_points()`
 
 ## Kabsch Alignment
 
-### Why Alignment?
+Apply optimal rotation (Kabsch algorithm) before computing loss for rotation-invariance.
 
-**Problem:** Protein structures can be rotated/translated arbitrarily, but we want rotation-invariant loss.
-
-**Solution:** Apply optimal rotation (Kabsch algorithm) before computing loss.
-
-### Implementation Details
-
-**Key Fix:** Correct rotation application
+**Critical Bug Fix:** Initial implementation had incorrect rotation application causing alignment failures:
 ```python
 # After SVD: R = Vt.T @ U.T
 # Apply rotation on the RIGHT: pred_aligned = pred_centered @ R.T
@@ -149,84 +131,27 @@ def make_path_loss(target_points: np.ndarray) -> Callable:
 
 ## Cα Coordinate Extraction
 
-**Key Detail:** Cα coordinates come from AlphaFold's structure module output.
-
-```python
-positions = outputs["structure_module"]["final_atom_positions"]
-ca = positions[:, 1, :]  # Index 1 = Cα (atom order: N=0, CA=1, C=2, O=3, ...)
-```
-
-**Shape:** `[L, 3]` where `L` = protein length
-
-**Important:** Coordinates are in AlphaFold's internal frame. We center them before alignment/loss computation.
+Cα coordinates from AlphaFold structure module: `outputs["structure_module"]["final_atom_positions"][:, 1, :]` (atom order: N=0, CA=1, C=2, ...). Coordinates are centered before alignment/loss computation.
 
 ## Loss Callback Pattern
 
-### How It Works
-
-ColabDesign calls loss callbacks during the optimization loop:
-
-```python
-# From colabdesign/af/model.py (simplified)
-for fn in self._callbacks["model"]["loss"]:
-    fn_args = {"inputs": inputs, "outputs": outputs, "opt": opt, "aux": aux, ...}
-    sub_args = {k: fn_args.get(k, None) for k in signature(fn).parameters}
-    aux["losses"].update(fn(**sub_args))
-```
-
-**Our Callback:**
-- Receives: `inputs`, `outputs`, `aux`
-- Extracts Cα coordinates from `outputs`
-- Computes loss (with Kabsch alignment)
-- Returns: `{"path": loss_value}` (or `{"chamfer": loss_value}`)
-
-**Weight Setting:**
-```python
-af_model.opt["weights"]["path"] = 0.02  # Our custom loss
-af_model.opt["weights"]["plddt"] = 2.0  # Built-in losses
-af_model.opt["weights"]["con"] = 0.2
-af_model.opt["weights"]["pae"] = 0.2
-```
-
-Total loss = weighted sum of all losses.
+ColabDesign calls loss callbacks during optimization. Our callback extracts Cα from `outputs`, applies Kabsch alignment, and returns `{"path": loss_value}`. Weights are set via `af_model.opt["weights"]["path"] = 0.02`.
 
 ## Key Parameters
 
 ### Target Extent (`target_extent`)
 
-**Purpose:** Controls the scale of the target shape in Ångströms.
+Controls scale in Ångströms. Guidance: ~1.5Å per residue (helix), so 80 residues → ~120Å. Typical range: 50-200Å.
 
-**Guidance:**
-- Alpha helix: ~1.5Å rise per residue
-- 80 residues → ~120Å axial length
-- Typical range: 30-150Å
-
-**Tuning:**
-- Too small: Protein can't fit the shape
-- Too large: Protein becomes too extended
-- Optimal: Match expected protein length (e.g., 80 residues → 30-50Å for compact shapes)
+**Critical Limitation:** `target_extent` must be manually tuned per STL shape. Different shapes require different values (e.g., cylinder: 100Å, sine_tube: 120Å) and there's no automatic way to determine optimal scaling. This makes the workflow less automated and requires trial-and-error for new shapes.
 
 ### Path Weight (`path_weight`)
 
-**Purpose:** Controls strength of shape constraint vs. protein stability.
-
-**Default:** 0.02
-
-**Tuning:**
-- Too low: Shape doesn't match (stability dominates)
-- Too high: Low pLDDT (shape constraint forces unphysical structures)
-- Sweet spot: Balance shape matching with pLDDT > 50
+Default: 0.02. Controls shape constraint vs. stability trade-off. Lower values favor stability (higher pLDDT), higher values favor shape matching (lower path loss).
 
 ### Centerline Surface Samples (`centerline_surface_samples`)
 
-**Purpose:** Number of surface points used for centerline extraction.
-
-**Default:** 10,000
-
-**Tuning:**
-- More samples: More accurate centerline (but slower)
-- Fewer samples: Faster but may miss details
-- Recommended: 10,000-12,000 for typical shapes
+Default: 10,000. Recommended: 10,000-12,000 for typical shapes.
 
 ## Failure Modes & Mitigations
 
@@ -242,27 +167,19 @@ Total loss = weighted sum of all losses.
 
 **Problem:** `target_extent` doesn't match protein length → poor convergence.
 
-**Mitigation:** 
-- Use `target_extent ≈ protein_length * 1.5Å` (helix approximation)
-- Or use `target_arclength` to set exact arclength
+**Mitigation:** Use `target_extent ≈ protein_length * 1.5Å` (helix approximation) or `target_arclength` for exact control.
 
 ### Centerline Extraction Failures
 
 **Problem:** Complex geometries (branches, sharp corners) break PCA + binning.
 
-**Mitigation:**
-- Stick to tube-like shapes (cylinders, helices, smooth curves)
-- Increase `surface_samples` for better coverage
-- Consider skeletonization algorithms for complex shapes (future work)
+**Mitigation:** Stick to tube-like shapes. For complex shapes, consider skeletonization algorithms (future work).
 
 ### Low pLDDT
 
 **Problem:** Shape constraint too strong → unphysical structures.
 
-**Mitigation:**
-- Reduce `path_weight` (try 0.01)
-- Increase `plddt_weight` (try 2.0-5.0)
-- Try simpler shape or longer protein
+**Mitigation:** Reduce `path_weight` or increase `plddt_weight` to rebalance the trade-off.
 
 ## Code Organization
 
@@ -306,7 +223,7 @@ Key Functions:
 - ❌ May fail on complex geometries
 - ❌ Assumes roughly cylindrical cross-sections
 
-**Alternative:** Skeletonization algorithms (e.g., medial axis)
+**Alternative:** Skeletonization algorithm
 - ✅ More robust for complex shapes
 - ❌ More complex, slower
 - ❌ Additional dependencies
@@ -318,13 +235,9 @@ Key Functions:
 **Trade-off:**
 - ✅ Prevents NaNs on collinear targets
 - ✅ Minimal impact on optimization (regularization is tiny)
-- ❌ Slightly modifies loss landscape (negligible in practice)
 
 ## Future Improvements
 
 1. **Surface Mode:** Use Chamfer loss for non-tube shapes
 2. **Better Centerline:** Skeletonization algorithms for complex geometries
-3. **Multi-Chain:** Extend to multi-chain protein design
-4. **Auto-Tuning:** Automatic `target_extent` selection based on protein length
-5. **Interactive Visualization:** Real-time overlay plots during optimization
-
+3. **Auto-Tuning:** Automatic `target_extent` selection based on protein length
