@@ -70,3 +70,32 @@ def test_invalid_inputs_raise(bad_shape):
     with pytest.raises(ValueError):
         chamfer_distance(bad_shape, bad_shape)
 
+
+def test_kabsch_collinear_target_no_nan():
+    """Kabsch with collinear target (rank-deficient) must not produce NaN."""
+    # Line along Z-axis (collinear, rank-1)
+    n_points = 80
+    z = np.linspace(-15.0, 15.0, n_points, dtype=np.float32)
+    target = np.stack([np.zeros_like(z), np.zeros_like(z), z], axis=1)
+    target_centered = target - target.mean(axis=0)
+    target_centered = jnp.asarray(target_centered)
+
+    # Random pred (not collinear)
+    rng = np.random.default_rng(42)
+    pred = rng.normal(size=(n_points, 3)).astype(np.float32)
+    pred_centered = pred - pred.mean(axis=0)
+    pred_centered = jnp.asarray(pred_centered)
+
+    # Forward pass should not NaN
+    aligned = _kabsch_align(pred_centered, target_centered)
+    assert jnp.all(jnp.isfinite(aligned)), "Kabsch forward produced NaN/Inf"
+
+    # Backward pass (gradients) should not NaN
+    def loss_fn(p):
+        a = _kabsch_align(p, target_centered)
+        return jnp.mean(jnp.sum((a - target_centered) ** 2, axis=-1))
+
+    grad_fn = jax.grad(loss_fn)
+    grads = grad_fn(pred_centered)
+    assert jnp.all(jnp.isfinite(grads)), "Kabsch gradient produced NaN/Inf"
+

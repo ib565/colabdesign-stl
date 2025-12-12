@@ -72,10 +72,16 @@ def _kabsch_align(pred: jnp.ndarray, target: jnp.ndarray) -> jnp.ndarray:
     """Align ``pred`` onto ``target`` via Kabsch (proper rotation only).
 
     Both inputs must be mean-centered before calling.
+    
+    Handles rank-deficient targets (e.g., collinear points like a line) by
+    adding small regularization to ensure SVD gradients remain finite.
     """
     pred = jnp.asarray(pred, dtype=jnp.float32)
     target = jnp.asarray(target, dtype=jnp.float32)
     h = pred.T @ target
+    # Regularize for numerical stability with rank-deficient targets (e.g., collinear lines).
+    # Without this, SVD backprop produces NaN when singular values are degenerate.
+    h = h + 1e-4 * jnp.eye(3, dtype=jnp.float32)
     u, _, vt = jnp.linalg.svd(h, full_matrices=False)
     r = vt.T @ u.T
 
@@ -156,8 +162,13 @@ def make_path_loss(
         ca = positions[:, CA_INDEX, :]
         ca_centered = ca - ca.mean(axis=0)
         ca_aligned = _kabsch_align(ca_centered, target_centered)
+        # Guard against rare NaNs/Infs (e.g. numerical issues early in optimization)
+        finite_align = jnp.all(jnp.isfinite(ca_aligned))
+        ca_aligned = lax.cond(finite_align, lambda _: ca_aligned, lambda _: ca_centered, operand=None)
+
         # Per-index MSE: mean of squared distances at each position
         loss = jnp.mean(jnp.sum((ca_aligned - target_centered) ** 2, axis=-1))
+        loss = jnp.where(jnp.isfinite(loss), loss, jnp.asarray(1e6, dtype=jnp.float32))
         return {"path": loss}
 
     return path_loss
