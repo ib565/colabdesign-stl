@@ -7,10 +7,7 @@ __pycache__/
 *.pyz
 *.pywz
 *.pyzw
-*.pyz
-*.pywz
-*.pyzw
-*.pyz
-*.pywz
 
 .env
+
+outputs/

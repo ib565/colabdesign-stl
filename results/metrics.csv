@@ -1,0 +1,5 @@
+shape,mode,L,target_extent,centerline_surface_samples,seed,path,path_aligned,plddt,pae
+cylinder,centerline,80,30.0,10000,0,<value>,<value>,<value>,<value>
+sine_tube,centerline,80,30.0,12000,0,<value>,<value>,<value>,<value>
+helix_tube_1turn,centerline,80,30.0,12000,0,<value>,<value>,<value>,<value>
+
