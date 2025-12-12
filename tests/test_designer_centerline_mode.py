@@ -5,9 +5,6 @@ import pytest
 
 from examples.stl.generators.make_cylinder_stl import make_cylinder_stl
 from src.stl_designer import STLProteinDesigner
-from dotenv import load_dotenv
-
-load_dotenv()
 
 
 def test_designer_centerline_uses_path_loss(tmp_path):
