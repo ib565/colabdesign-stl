@@ -2,13 +2,13 @@
 
 Design proteins to approximate arbitrary STL shapes by integrating custom shape losses into [ColabDesign](https://github.com/sokrypton/ColabDesign). This extension adds STL → point-cloud preprocessing, centerline extraction for tube-like shapes, and a per-index path loss for ordered targets.
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ib565/colabdesign-stl/blob/main/examples/colab_stl_notebook.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ib565/colabdesign-stl/blob/master/examples/colab_stl_notebook.ipynb)
 
 ## Quick Start
 
 ### Colab (Recommended)
 
-1. **Open the notebook**: Click the "Open In Colab" badge above or [open directly](https://colab.research.google.com/github/ib565/colabdesign-stl/blob/main/examples/colab_stl_notebook.ipynb)
+1. **Open the notebook**: Click the "Open In Colab" badge above or [open directly](https://colab.research.google.com/github/ib565/colabdesign-stl/blob/master/examples/colab_stl_notebook.ipynb)
 2. **Choose a preset**: Set `PRESET = "stl_centerline_cylinder"` (or `sine_tube`, `helix_tube_1turn`)
 3. **Run all cells**: The notebook will clone the repo, install dependencies, and run protein design
 
