@@ -65,12 +65,12 @@ A straight cylindrical tube (simplest case for centerline extraction).
 ### Sine Tube
 A tube following a sine-wave path (tests centerline extraction on curved shapes).
 
-![Sine tube overlay](results/overlays/sine_tube.png)
+![Sine tube overlay](results/overlays/sine.png)
 
 ### Helix Tube
 A helical tube with one complete turn (tests 3D helical centerline extraction).
 
-![Helix tube overlay](results/overlays/helix_tube_1turn.png)
+![Helix tube overlay](results/overlays/helix.png)
 
 **Metrics:** See `results/metrics.csv` for quantitative results.
 
