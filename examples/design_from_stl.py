@@ -11,7 +11,6 @@ Example:
 """
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -21,20 +20,29 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src import STLProteinDesigner  # noqa: E402
+from examples.stl.resolve_stl import resolve_or_generate_stl  # noqa: E402
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Design a protein to match an STL shape.")
     parser.add_argument("--stl", required=True, help="Path to STL file.")
     parser.add_argument("--length", type=int, default=100, help="Protein length (residues).")
-    parser.add_argument("--num-points", type=int, default=1000, help="Number of target points to sample.")
+    parser.add_argument("--num-points", type=int, default=1000, help="Number of target points to sample (surface mode only).")
     parser.add_argument("--target-extent", type=float, default=100.0, help="Longest target dimension after scaling (Å).")
     parser.add_argument("--center", action=argparse.BooleanOptionalAction, default=True, help="Center target point cloud.")
+    parser.add_argument("--normalize-target", action=argparse.BooleanOptionalAction, default=True, help="Apply bbox normalization to target points.")
+    parser.add_argument("--target-mode", choices=["surface", "centerline"], default="centerline", help="Use STL surface sampling or extracted centerline.")
+    parser.add_argument("--target-arclength", type=float, default=None, help="Optional target arclength for centerline rescaling.")
+    parser.add_argument("--centerline-surface-samples", type=int, default=10_000, help="Surface samples for centerline extraction.")
+    parser.add_argument("--centerline-bins", type=int, default=None, help="Bins along PCA axis for centerline extraction (default 4*L).")
+    parser.add_argument("--centerline-smooth-window", type=int, default=5, help="Moving-average window for centerline smoothing.")
     parser.add_argument("--sample-seed", type=int, default=0, help="Seed for STL sampling (None for stochastic).")
     parser.add_argument("--run-seed", type=int, default=0, help="Seed for design restart (Gumbel init).")
-    parser.add_argument("--chamfer-weight", type=float, default=1.0, help="Chamfer loss weight.")
+    parser.add_argument("--chamfer-weight", type=float, default=1.0, help="Chamfer loss weight (surface mode).")
+    parser.add_argument("--path-weight", type=float, default=0.02, help="Per-index path loss weight (centerline mode).")
     parser.add_argument("--plddt", type=float, default=0.1, help="pLDDT loss weight.")
     parser.add_argument("--pae", type=float, default=0.05, help="PAE loss weight.")
+    parser.add_argument("--con", type=float, default=0.5, help="Contact loss weight.")
     parser.add_argument("--use-sqrt", action="store_true", help="Use sqrt Chamfer (Å units, slower).")
     parser.add_argument("--soft-iters", type=int, default=200, help="Soft stage iterations.")
     parser.add_argument("--temp-iters", type=int, default=100, help="Temp annealing iterations.")
@@ -52,14 +60,13 @@ def _ensure_out_dir(out_dir: Path) -> None:
 def main() -> None:
     args = _parse_args()
 
-    stl_path = Path(args.stl)
-    if not stl_path.exists():
-        raise FileNotFoundError(f"STL not found: {stl_path}")
+    stl_path = resolve_or_generate_stl(args.stl)
 
     out_dir = Path(args.out_dir) if args.out_dir else Path("outputs") / stl_path.stem
     _ensure_out_dir(out_dir)
 
     print("Initializing designer...")
+    use_path_loss = args.target_mode == "centerline"
     designer = STLProteinDesigner(
         stl_path=str(stl_path),
         protein_length=args.length,
@@ -68,9 +75,18 @@ def main() -> None:
         center=args.center,
         sample_seed=None if args.sample_seed < 0 else args.sample_seed,
         chamfer_weight=args.chamfer_weight,
+        path_weight=args.path_weight,
+        use_path_loss=use_path_loss,
+        con_weight=args.con,
         plddt_weight=args.plddt,
         pae_weight=args.pae,
         use_sqrt=args.use_sqrt,
+        stl_target_mode=args.target_mode,
+        target_arclength=args.target_arclength,
+        centerline_surface_samples=args.centerline_surface_samples,
+        centerline_bins=args.centerline_bins,
+        centerline_smooth_window=args.centerline_smooth_window,
+        normalize_target_points=args.normalize_target,
         data_dir=args.data_dir,
         verbose=max(1, args.soft_iters // 20),
     )
@@ -92,7 +108,14 @@ def main() -> None:
 
     print("Done.")
     print(f"Sequence length: {len(seq)}")
-    print(f"Chamfer: {metrics['chamfer']:.3f} (squared Å)" if not args.use_sqrt else f"Chamfer: {metrics['chamfer']:.3f} (Å)")
+    if use_path_loss:
+        print(f"Path:   {metrics['path']:.3f} (squared Å)")
+    else:
+        print(
+            f"Chamfer: {metrics['chamfer']:.3f} (squared Å)"
+            if not args.use_sqrt
+            else f"Chamfer: {metrics['chamfer']:.3f} (Å)"
+        )
     print(f"pLDDT:  {metrics['plddt']:.3f}")
     print(f"PAE:    {metrics['pae']:.3f}")
     print(f"PDB:    {pdb_path}")

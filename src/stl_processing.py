@@ -120,6 +120,154 @@ def stl_to_points(
     return normalize_points(points, target_extent=target_extent, center=center)
 
 
+def _pca_canonicalize(points: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Center points and rotate into PCA frame (columns = principal axes)."""
+    pts = _validate_points_np(points)
+    centered = pts - pts.mean(axis=0)
+    # SVD on covariance-equivalent matrix for robustness
+    _, _, vt = np.linalg.svd(centered, full_matrices=False)
+    rot = vt.T  # (3,3) columns = principal directions
+    return centered @ rot, rot
+
+
+def _polyline_arclength(polyline: np.ndarray) -> float:
+    """Return total arclength of an ordered polyline."""
+    if len(polyline) < 2:
+        return 0.0
+    seg = np.diff(polyline, axis=0)
+    return float(np.sum(np.linalg.norm(seg, axis=1)))
+
+
+def _resample_polyline_by_arclength(polyline: np.ndarray, num_points: int) -> np.ndarray:
+    """Uniformly resample an ordered polyline to num_points via arclength interp."""
+    if len(polyline) == 0:
+        raise ValueError("Polyline is empty.")
+    if len(polyline) == 1:
+        return np.repeat(polyline.astype(np.float32), num_points, axis=0)
+
+    seg = np.diff(polyline, axis=0)
+    seg_len = np.linalg.norm(seg, axis=1)
+    s = np.concatenate([[0.0], np.cumsum(seg_len)])
+    total = s[-1]
+    if total <= 0:
+        raise ValueError("Polyline has zero length; cannot resample.")
+
+    target_s = np.linspace(0.0, total, num_points)
+    resampled = np.empty((num_points, 3), dtype=np.float32)
+    for dim in range(3):
+        resampled[:, dim] = np.interp(target_s, s, polyline[:, dim])
+    return resampled
+
+
+def _moving_average(points: np.ndarray, window: int) -> np.ndarray:
+    """Simple centered moving average; falls back to original if window<=1."""
+    if window <= 1 or len(points) < 2:
+        return points
+    kernel = np.ones(window) / window
+    pad = window // 2
+    padded = np.pad(points, ((pad, pad), (0, 0)), mode="edge")
+    smoothed = np.stack(
+        [np.convolve(padded[:, i], kernel, mode="valid") for i in range(3)], axis=1
+    )
+    return smoothed.astype(np.float32)
+
+
+def stl_to_centerline_points(
+    stl_path: str,
+    *,
+    num_points: int,
+    surface_samples: int = 10_000,
+    bins: Optional[int] = None,
+    smooth_window: int = 5,
+    seed: Optional[int] = None,
+    target_arclength: Optional[float] = None,
+) -> np.ndarray:
+    """
+    Extract an ordered centerline polyline from a tube-like STL mesh.
+
+    Steps:
+      1) Sample many surface points.
+      2) PCA canonicalize to choose a stable main axis.
+      3) Bin along PC0, take centroids per bin (skip empty bins).
+      4) Smooth (moving average).
+      5) Resample by arclength to exactly ``num_points``.
+      6) Optionally scale to a target arclength.
+
+    Returns:
+        (num_points, 3) float32, centered, ordered along the principal axis.
+    """
+    if not os.path.exists(stl_path):
+        raise FileNotFoundError(f"STL file not found: {stl_path}")
+    mesh = trimesh.load_mesh(stl_path, force="mesh")
+    if mesh.is_empty or len(mesh.vertices) == 0:
+        raise ValueError(f"STL file is empty or invalid: {stl_path}")
+
+    if seed is not None:
+        np.random.seed(seed)
+    pts, _ = trimesh.sample.sample_surface(mesh, surface_samples)
+    pts = _validate_points_np(pts)
+
+    # PCA canonicalization
+    pts_rot, rot = _pca_canonicalize(pts)
+    axis_vals = pts_rot[:, 0]
+
+    # Bin along PC0 with deterministic handling of empty bins (linear interp)
+    b = bins or max(4 * num_points, 16)
+    edges = np.linspace(axis_vals.min(), axis_vals.max(), b + 1)
+    inds = np.digitize(axis_vals, edges) - 1
+    centroids = np.full((b, 3), np.nan, dtype=np.float64)
+    counts = np.zeros(b, dtype=np.int32)
+    for bi in range(b):
+        mask = inds == bi
+        if np.any(mask):
+            centroids[bi] = pts_rot[mask].mean(axis=0)
+            counts[bi] = mask.sum()
+
+    # Require at least 2 bins populated
+    if np.count_nonzero(np.isfinite(centroids[:, 0])) < 2:
+        raise ValueError("Centerline extraction failed: too few populated bins.")
+
+    # Fill leading/trailing NaNs with nearest valid
+    valid_idx = np.where(np.isfinite(centroids[:, 0]))[0]
+    first, last = valid_idx[0], valid_idx[-1]
+    centroids[:first] = centroids[first]
+    centroids[last + 1 :] = centroids[last]
+
+    # Linear interpolate interior NaNs per axis
+    x = np.arange(b)
+    for dim in range(3):
+        y = centroids[:, dim]
+        nan_mask = ~np.isfinite(y)
+        if nan_mask.any():
+            y[nan_mask] = np.interp(x[nan_mask], x[~nan_mask], y[~nan_mask])
+            centroids[:, dim] = y
+
+    poly = centroids.astype(np.float32)
+
+    # Smooth
+    poly = _moving_average(poly, smooth_window)
+
+    # Ensure deterministic direction: if decreasing along PC0, flip
+    if poly[-1, 0] < poly[0, 0]:
+        poly = poly[::-1]
+
+    # Resample to num_points along arclength
+    poly = _resample_polyline_by_arclength(poly, num_points)
+
+    # Optional arclength scaling
+    if target_arclength is not None:
+        current = _polyline_arclength(poly)
+        if current <= 0:
+            raise ValueError("Resampled centerline has zero arclength.")
+        scale = float(target_arclength) / current
+        poly = poly * scale
+
+    # Return centered in original frame orientation (but we keep PCA frame;
+    # caller can optionally rotate back if needed—here we keep PCA frame for stability).
+    poly = poly - poly.mean(axis=0)
+    return poly.astype(np.float32)
+
+
 def plot_point_cloud(
     points: np.ndarray,
     target: Optional[np.ndarray] = None,

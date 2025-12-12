@@ -7,12 +7,17 @@ single class plus convenience plotting utilities.
 
 import os
 from pathlib import Path
-from typing import Dict, Optional, Sequence, Tuple
+from typing import Dict, Literal, Optional, Sequence, Tuple
 
 import numpy as np
 
 from .losses import make_path_loss, make_shape_loss
-from .stl_processing import normalize_points, plot_point_cloud, stl_to_points
+from .stl_processing import (
+    normalize_points,
+    plot_point_cloud,
+    stl_to_centerline_points,
+    stl_to_points,
+)
 
 
 def _resolve_data_dir(user_dir: Optional[str]) -> Optional[Path]:
@@ -82,6 +87,12 @@ class STLProteinDesigner:
         target_extent: float = 100.0,
         center: bool = True,
         sample_seed: Optional[int] = 0,
+        stl_target_mode: Literal["surface", "centerline"] = "surface",
+        target_arclength: Optional[float] = None,
+        centerline_surface_samples: int = 10_000,
+        centerline_bins: Optional[int] = None,
+        centerline_smooth_window: int = 5,
+        normalize_target_points: bool = True,
         chamfer_weight: float = 1.0,
         path_weight: float = 0.0,
         use_path_loss: bool = False,
@@ -110,22 +121,48 @@ class STLProteinDesigner:
         if self.stl_path is not None:
             if not self.stl_path.exists():
                 raise FileNotFoundError(f"STL not found: {self.stl_path}")
-            self.target_points = stl_to_points(
-                str(self.stl_path),
-                num_points=num_target_points,
-                target_extent=target_extent,
-                center=center,
-                seed=sample_seed,
-            )
+            if stl_target_mode == "surface":
+                pts = stl_to_points(
+                    str(self.stl_path),
+                    num_points=num_target_points,
+                    target_extent=target_extent,
+                    center=center,
+                    seed=sample_seed,
+                )
+            elif stl_target_mode == "centerline":
+                pts = stl_to_centerline_points(
+                    str(self.stl_path),
+                    num_points=protein_length,
+                    surface_samples=centerline_surface_samples,
+                    bins=centerline_bins,
+                    smooth_window=centerline_smooth_window,
+                    seed=sample_seed,
+                    target_arclength=target_arclength,
+                )
+            else:
+                raise ValueError(f"Unknown stl_target_mode: {stl_target_mode}")
+            if normalize_target_points:
+                self.target_points = normalize_points(
+                    pts, target_extent=target_extent, center=center
+                )
+            else:
+                self.target_points = (
+                    pts - pts.mean(axis=0) if center else np.asarray(pts)
+                ).astype(np.float32)
         else:
             pts = np.asarray(target_points, dtype=np.float32)
-            self.target_points = normalize_points(
-                pts, target_extent=target_extent, center=center
-            )
+            if normalize_target_points:
+                self.target_points = normalize_points(
+                    pts, target_extent=target_extent, center=center
+                )
+            else:
+                self.target_points = (
+                    pts - pts.mean(axis=0) if center else np.asarray(pts)
+                ).astype(np.float32)
 
         # Choose loss function
-        self.use_path_loss = use_path_loss
-        if use_path_loss:
+        self.use_path_loss = use_path_loss or (stl_target_mode == "centerline")
+        if self.use_path_loss:
             if len(self.target_points) != protein_length:
                 raise ValueError(
                     f"Path loss requires len(target_points)==protein_length, "
@@ -154,7 +191,7 @@ class STLProteinDesigner:
 
         # Explicitly set weights; many defaults are zero in hallucination.
         weights = self.model.opt["weights"]
-        if use_path_loss:
+        if self.use_path_loss:
             # Per-index MSE loss; disable Chamfer
             weights.update(
                 {

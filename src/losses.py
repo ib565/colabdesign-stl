@@ -123,6 +123,10 @@ def make_shape_loss(
 
     def shape_loss(inputs, outputs, aux):
         positions = outputs["structure_module"]["final_atom_positions"]
+        if positions.shape[0] != target.shape[0]:
+            raise ValueError(
+                f"Chamfer/Kabsch target length mismatch: pred L={positions.shape[0]} vs target N={target.shape[0]}"
+            )
         ca = positions[:, CA_INDEX, :]
         ca_centered = ca - ca.mean(axis=0)
         ca_aligned = _kabsch_align(ca_centered, target_centered)

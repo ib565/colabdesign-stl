@@ -8,5 +8,6 @@ from .stl_processing import (  # noqa: F401
     normalize_points,
     plot_point_cloud,
     stl_to_points,
+    stl_to_centerline_points,
 )
 
