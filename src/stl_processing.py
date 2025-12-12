@@ -286,20 +286,87 @@ def plot_point_cloud(
     title: str = "Point cloud",
     save_path: Optional[str] = None,
     show: bool = True,
+    connected: bool = False,
+    view_angle: Optional[tuple[float, float]] = None,
 ) -> None:
-    """Quick 3D scatter for visual inspection."""
+    """3D visualization of point cloud with improved clarity.
+    
+    Args:
+        points: Point cloud array (N, 3).
+        target: Optional target points to overlay (N, 3).
+        title: Plot title.
+        save_path: Optional path to save figure.
+        show: Whether to display interactively.
+        connected: If True, draw lines connecting points (for centerlines/paths).
+        view_angle: Optional (elevation, azimuth) in degrees. Default: (30, 45) for isometric view.
+    """
     import matplotlib.pyplot as plt
     from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 
-    fig = plt.figure()
+    fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection="3d")
-    ax.scatter(points[:, 0], points[:, 1], points[:, 2], s=4, alpha=0.6, label="points")
+    
+    # Set viewing angle (isometric by default)
+    if view_angle is None:
+        view_angle = (30, 45)
+    ax.view_init(elev=view_angle[0], azim=view_angle[1])
+    
+    # Plot points with lines if connected (for centerlines)
+    if connected and len(points) > 1:
+        # Draw line connecting points
+        ax.plot(
+            points[:, 0], points[:, 1], points[:, 2],
+            color="deepskyblue", linewidth=2, alpha=0.7, label="path"
+        )
+        # Draw points as larger markers
+        ax.scatter(
+            points[:, 0], points[:, 1], points[:, 2],
+            s=50, c="deepskyblue", alpha=0.9, edgecolors="darkblue", linewidths=0.5, label="points"
+        )
+    else:
+        # Regular scatter for surface points
+        ax.scatter(
+            points[:, 0], points[:, 1], points[:, 2],
+            s=30, c="deepskyblue", alpha=0.7, edgecolors="darkblue", linewidths=0.3, label="points"
+        )
+    
+    # Plot target if provided
     if target is not None:
-        ax.scatter(target[:, 0], target[:, 1], target[:, 2], s=4, alpha=0.6, label="target")
-    ax.set_title(title)
-    ax.legend()
+        if connected and len(target) > 1:
+            ax.plot(
+                target[:, 0], target[:, 1], target[:, 2],
+                color="red", linewidth=2, alpha=0.7, linestyle="--", label="target path"
+            )
+        ax.scatter(
+            target[:, 0], target[:, 1], target[:, 2],
+            s=50, c="red", alpha=0.8, marker="x", linewidths=1.5, label="target"
+        )
+    
+    # Labels and formatting
+    ax.set_xlabel("X (Å)", fontsize=11)
+    ax.set_ylabel("Y (Å)", fontsize=11)
+    ax.set_zlabel("Z (Å)", fontsize=11)
+    ax.set_title(title, fontsize=13, fontweight="bold")
+    ax.legend(loc="upper left", fontsize=9)
+    
+    # Set equal aspect ratio for better 3D perception
+    max_range = np.array([
+        points[:, 0].max() - points[:, 0].min(),
+        points[:, 1].max() - points[:, 1].min(),
+        points[:, 2].max() - points[:, 2].min()
+    ]).max() / 2.0
+    mid_x = (points[:, 0].max() + points[:, 0].min()) * 0.5
+    mid_y = (points[:, 1].max() + points[:, 1].min()) * 0.5
+    mid_z = (points[:, 2].max() + points[:, 2].min()) * 0.5
+    ax.set_xlim(mid_x - max_range, mid_x + max_range)
+    ax.set_ylim(mid_y - max_range, mid_y + max_range)
+    ax.set_zlim(mid_z - max_range, mid_z + max_range)
+    
+    # Grid for better depth perception
+    ax.grid(True, alpha=0.3)
+    
     if save_path:
-        plt.savefig(save_path, dpi=200, bbox_inches="tight")
+        plt.savefig(save_path, dpi=200, bbox_inches="tight", facecolor="white")
     if show:
         plt.show()
     plt.close(fig)

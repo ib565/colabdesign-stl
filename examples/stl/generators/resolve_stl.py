@@ -44,8 +44,10 @@ def resolve_or_generate_stl(name_or_path: str, generators: Dict[str, Generator] 
         return p
 
     # Look under examples/stl/
-    root = Path(__file__).resolve().parents[2]
-    stl_dir = root / "examples" / "stl"
+    # __file__ is in examples/stl/generators/resolve_stl.py
+    # parents[0] = generators/, parents[1] = stl/, parents[2] = examples/, parents[3] = repo root
+    root = Path(__file__).resolve().parents[2]  # examples/
+    stl_dir = root / "stl"  # examples/stl/
     candidate = stl_dir / p.name
     if candidate.exists():
         return candidate

@@ -1,0 +1,9 @@
+# Ignore Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore generated STLs (they're versioned, but cache can be regenerated)
+# Uncomment if you want to ignore STLs:
+# *.stl
+

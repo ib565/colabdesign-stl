@@ -2,7 +2,7 @@ import numpy as np
 import trimesh
 
 from src.stl_processing import stl_to_centerline_points
-from examples.stl.make_cylinder_stl import make_cylinder_stl
+from examples.stl.generators.make_cylinder_stl import make_cylinder_stl
 
 
 def _random_rotation(seed: int) -> np.ndarray:

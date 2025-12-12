@@ -20,7 +20,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src import STLProteinDesigner  # noqa: E402
-from examples.stl.resolve_stl import resolve_or_generate_stl  # noqa: E402
+from examples.stl.generators.resolve_stl import resolve_or_generate_stl  # noqa: E402
 
 
 def _parse_args() -> argparse.Namespace:

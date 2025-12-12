@@ -14,9 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from examples.stl.make_cylinder_stl import make_cylinder_stl
-from examples.stl.make_sine_tube_stl import make_sine_tube_stl
-from examples.stl.make_helix_stl import make_helix_stl
+from examples.stl.generators.make_cylinder_stl import make_cylinder_stl
+from examples.stl.generators.make_sine_tube_stl import make_sine_tube_stl
+from examples.stl.generators.make_helix_stl import make_helix_stl
 
 
 def main():

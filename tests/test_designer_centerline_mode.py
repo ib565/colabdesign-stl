@@ -3,7 +3,7 @@ import os
 import numpy as np
 import pytest
 
-from examples.stl.make_cylinder_stl import make_cylinder_stl
+from examples.stl.generators.make_cylinder_stl import make_cylinder_stl
 from src.stl_designer import STLProteinDesigner
 from dotenv import load_dotenv
 

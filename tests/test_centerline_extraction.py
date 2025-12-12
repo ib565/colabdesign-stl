@@ -5,8 +5,8 @@ from src.stl_processing import (
     _polyline_arclength,
     stl_to_centerline_points,
 )
-from examples.stl.make_cylinder_stl import make_cylinder_stl
-from examples.stl.make_sine_tube_stl import make_sine_tube_stl
+from examples.stl.generators.make_cylinder_stl import make_cylinder_stl
+from examples.stl.generators.make_sine_tube_stl import make_sine_tube_stl
 
 
 def test_cylinder_centerline(tmp_path):
