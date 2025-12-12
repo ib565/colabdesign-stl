@@ -1,6 +1,6 @@
 # ColabDesign STL Extension
 
-Design proteins to approximate arbitrary STL shapes by integrating custom shape losses into ColabDesign. This repo adds STL → point-cloud preprocessing, a Kabsch-aligned Chamfer loss, and a small API/CLI for end-to-end runs.
+Design proteins to approximate arbitrary STL shapes by integrating custom shape losses into ColabDesign. This repo adds STL → point-cloud preprocessing, a Kabsch-aligned Chamfer loss, a per-index path loss for ordered targets, and a small API/CLI for end-to-end runs.
 
 ## Status
 - STL processing ✅
@@ -9,7 +9,8 @@ Design proteins to approximate arbitrary STL shapes by integrating custom shape 
 - Kabsch fixes ✅
   - correct rotation application (pred @ R.T)
   - rank-deficient targets (collinear lines) regularized to avoid NaNs
-- STLProteinDesigner + CLI ✅
+- STLProteinDesigner + CLI ✅ (surface + centerline modes)
+- Centerline extraction ✅ (PCA, bin smoothing, arclength resample)
 - Alignment + Kabsch sanity checks ✅
 
 ## Requirements
@@ -88,6 +89,7 @@ Keep `NUM_TARGET_POINTS == PROTEIN_LENGTH` and `USE_PATH_LOSS=True`.
 |--------|----------------|---------------|-------------|-------------|-------------------|------------------------|-------|
 | Line   | 80             | 150           | 150         | 0.02        | 0.2 / 0.2 / 2.0   | 200 / 100 / 20         | Extended line needs larger extent and low con/pae |
 | Helix  | 80             | 30            | 40          | 0.02        | 0.5 / 0.2 / 2.0   | 300 / 150 / 20         | Compact helix works with smaller extent and higher con |
+| Cylinder centerline | 80 | 100 | n/a | 0.02 | 0.2 / 0.2 / 2.0 | 200 / 100 / 20 | Increase extent to get ~2–4 Å avg step |
 
 ### ColabDesign install & Alphafold weights
 - Install ColabDesign into the active venv (sibling clone):
@@ -114,38 +116,44 @@ Keep `NUM_TARGET_POINTS == PROTEIN_LENGTH` and `USE_PATH_LOSS=True`.
 Run end-to-end from an STL file, saving sequence, PDB, and optional overlay plot:
 ```pwsh
 # From repo root, venv active
-python examples/design_from_stl.py --stl examples/helix.stl `
-  --length 100 --num-points 1000 --target-extent 100 `
+python examples/design_from_stl.py --stl cylinder `
+  --target-mode centerline --length 80 --target-extent 100 `
+  --centerline-surface-samples 10000 `
   --soft-iters 200 --temp-iters 100 --hard-iters 20 `
-  --chamfer-weight 1.0 --plddt 0.1 --pae 0.05 `
+  --path-weight 0.02 --con 0.2 --plddt 2.0 --pae 0.2 `
   --sample-seed 0 --run-seed 0 --data-dir ..\ColabDesign `
-  --out-dir outputs\helix --plot
+  --out-dir outputs\cylinder --plot
 ```
 Outputs:
-- `outputs/helix/sequence.txt`
-- `outputs/helix/structure.pdb`
-- `outputs/helix/overlay.png` (target points vs predicted Cα)
+- `outputs/cylinder/sequence.txt`
+- `outputs/cylinder/structure.pdb`
+- `outputs/cylinder/overlay.png` (target vs predicted Cα)
 
 Key flags:
-- `--sample-seed`: controls STL surface sampling (default 0 for reproducibility; set to -1 for stochastic).
+- `--target-mode {surface,centerline}`: centerline uses per-index path loss; surface uses Chamfer.
+- `--target-extent`: bbox scaling (default). Increase to widen spacing (e.g., 100 for 80-res cylinder).
+- `--target-arclength`: optional; if set, combine with `--normalize-target false` to avoid re-scaling.
+- `--sample-seed`: controls STL sampling (surface or centerline); set -1 for stochastic.
 - `--run-seed`: controls the Gumbel restart in ColabDesign.
-- `--use-sqrt`: switch to sqrt Chamfer if you want Å-scale values in logs (slightly slower).
-- `--data-dir`: path to AlphaFold params (falls back to `AF_DATA_DIR` or `../ColabDesign` if present).
+- `--path-weight` vs `--chamfer-weight`: only one is used depending on `--target-mode`.
 
 Programmatic use:
 ```python
 from src import STLProteinDesigner
 
 designer = STLProteinDesigner(
-    stl_path="examples/helix.stl",
-    protein_length=100,
-    num_target_points=1000,
+    stl_path="examples/stl/cylinder.stl",
+    protein_length=80,
+    num_target_points=80,  # surface mode only
     target_extent=100.0,
     sample_seed=0,
-    chamfer_weight=1.0,
-    plddt_weight=0.1,
-    pae_weight=0.05,
-    use_sqrt=False,
+    path_weight=0.02,
+    use_path_loss=True,
+    con_weight=0.2,
+    plddt_weight=2.0,
+    pae_weight=0.2,
+    stl_target_mode="centerline",
+    centerline_surface_samples=10000,
     data_dir="../ColabDesign",
 )
 seq = designer.design(soft_iters=200, temp_iters=100, hard_iters=20, run_seed=0)
@@ -157,10 +165,10 @@ print(seq[:60], metrics)
 
 Notes:
 - First JIT compile still takes 1–3 minutes on CPU; GPU is recommended.
-- Chamfer is squared by default for speed; use `--use-sqrt` for Å units.
-- For ordered targets (line/helix/centerline), prefer per-index path loss (`use_path_loss=True` in `STLProteinDesigner`), and set `len(target_points)==protein_length`.
+- For ordered targets (line/helix/centerline), prefer per-index path loss; ensure `len(target_points)==protein_length`.
+- Chamfer is squared by default for speed (surface mode); use `--use-sqrt` for Å units.
 - `design_3stage` is used for better convergence on hallucination.
-- Kabsch alignment is applied after centering both target and predicted Cα; scale is not normalized beyond your `target_extent`.
+- Kabsch alignment is applied after centering; scale follows your chosen target scaling (bbox, or arclength if you set it).
 
 ## Files
 - `src/stl_processing.py` — STL loader (`stl_to_points`) + `plot_point_cloud`.
