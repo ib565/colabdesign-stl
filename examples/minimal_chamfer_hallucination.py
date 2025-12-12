@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.losses import make_shape_loss  # noqa: E402
+from src.losses import make_shape_loss, make_path_loss  # noqa: E402
 
 DATA_DIR = Path(__file__).resolve().parents[1] / ".." / "ColabDesign"
 
@@ -49,7 +49,7 @@ def _mk_model(
 
     # Simple 1D line target along x-axis.
     target = np.linspace([0, 0, 0], [100, 0, 0], length).astype(np.float32)
-    loss_fn = make_shape_loss(target, use_sqrt=use_sqrt)
+    loss_fn = make_path_loss(target)
 
     af_model = mk_afdesign_model(protocol="hallucination", loss_callback=loss_fn, data_dir=DATA_DIR)
     print("Loaded model params:", getattr(af_model, "_model_names", []))
@@ -60,7 +60,8 @@ def _mk_model(
     weights = af_model.opt["weights"]
     weights.update(
         {
-            "chamfer": chamfer_weight,
+            "path": chamfer_weight,  # reuse CLI arg name for this path demo
+            "chamfer": 0.0,
             "con": weights.get("con", 1.0),
             "i_con": weights.get("i_con", 0.0),
             "plddt": plddt_weight,
