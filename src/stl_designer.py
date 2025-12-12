@@ -11,7 +11,7 @@ from typing import Dict, Optional, Sequence, Tuple
 
 import numpy as np
 
-from .losses import make_shape_loss
+from .losses import make_path_loss, make_shape_loss
 from .stl_processing import normalize_points, plot_point_cloud, stl_to_points
 
 
@@ -66,7 +66,11 @@ def _chamfer_np(
 
 
 class STLProteinDesigner:
-    """Design proteins to match STL shapes via Chamfer loss."""
+    """Design proteins to match target shapes via Chamfer or per-index path loss.
+    
+    For ordered paths (line, helix, centerline), use `use_path_loss=True` with
+    `len(target_points) == protein_length` for per-index MSE with cleaner gradients.
+    """
 
     def __init__(
         self,
@@ -79,6 +83,8 @@ class STLProteinDesigner:
         center: bool = True,
         sample_seed: Optional[int] = 0,
         chamfer_weight: float = 1.0,
+        path_weight: float = 0.0,
+        use_path_loss: bool = False,
         con_weight: float = 1.0,
         plddt_weight: float = 0.1,
         pae_weight: float = 0.05,
@@ -117,7 +123,17 @@ class STLProteinDesigner:
                 pts, target_extent=target_extent, center=center
             )
 
-        loss_fn = make_shape_loss(self.target_points, use_sqrt=use_sqrt)
+        # Choose loss function
+        self.use_path_loss = use_path_loss
+        if use_path_loss:
+            if len(self.target_points) != protein_length:
+                raise ValueError(
+                    f"Path loss requires len(target_points)==protein_length, "
+                    f"got {len(self.target_points)} vs {protein_length}"
+                )
+            loss_fn = make_path_loss(self.target_points)
+        else:
+            loss_fn = make_shape_loss(self.target_points, use_sqrt=use_sqrt)
 
         resolved_data_dir = _resolve_data_dir(data_dir)
         if resolved_data_dir is None:
@@ -138,17 +154,33 @@ class STLProteinDesigner:
 
         # Explicitly set weights; many defaults are zero in hallucination.
         weights = self.model.opt["weights"]
-        weights.update(
-            {
-                "chamfer": chamfer_weight,
-                "con": con_weight,
-                "i_con": weights.get("i_con", 0.0),
-                "plddt": plddt_weight,
-                "pae": pae_weight,
-                "exp_res": weights.get("exp_res", 0.0),
-                "helix": weights.get("helix", 0.0),
-            }
-        )
+        if use_path_loss:
+            # Per-index MSE loss; disable Chamfer
+            weights.update(
+                {
+                    "path": path_weight if path_weight > 0 else chamfer_weight,
+                    "chamfer": 0.0,
+                    "con": con_weight,
+                    "i_con": weights.get("i_con", 0.0),
+                    "plddt": plddt_weight,
+                    "pae": pae_weight,
+                    "exp_res": weights.get("exp_res", 0.0),
+                    "helix": weights.get("helix", 0.0),
+                }
+            )
+        else:
+            # Chamfer loss (original)
+            weights.update(
+                {
+                    "chamfer": chamfer_weight,
+                    "con": con_weight,
+                    "i_con": weights.get("i_con", 0.0),
+                    "plddt": plddt_weight,
+                    "pae": pae_weight,
+                    "exp_res": weights.get("exp_res", 0.0),
+                    "helix": weights.get("helix", 0.0),
+                }
+            )
 
         self.model.prep_inputs(length=protein_length)
         self.verbose = verbose
@@ -238,16 +270,21 @@ class STLProteinDesigner:
         
         metrics = {
             "chamfer": float(log.get("chamfer", float("nan"))),
+            "path": float(log.get("path", float("nan"))),
             "plddt": float(log.get("plddt", float("nan"))),
             "pae": float(log.get("pae", float("nan"))),
         }
 
-        # Recompute chamfer from actual CA coordinates for verification
+        # Recompute geometry loss from actual CA coordinates for verification
         try:
             ca = self.get_ca_coords(get_best=True, aligned=False)
             ca_aligned, target_centered = _kabsch_align_np(ca, self.target_points)
             metrics["chamfer_aligned"] = _chamfer_np(
                 ca_aligned, target_centered, use_sqrt=self.use_sqrt
+            )
+            # Per-index MSE (path loss equivalent)
+            metrics["path_aligned"] = float(
+                np.mean(np.sum((ca_aligned - target_centered) ** 2, axis=-1))
             )
             
             # Also compute pLDDT directly from coordinates if available

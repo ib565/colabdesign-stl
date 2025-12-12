@@ -125,3 +125,40 @@ def make_shape_loss(
 
     return shape_loss
 
+
+def make_path_loss(
+    target_points: np.ndarray,
+) -> Callable:
+    """Create a per-index MSE loss callback for ordered paths.
+
+    Use when target_points has exactly L points matching the protein length,
+    providing 1:1 correspondences. Applies Kabsch alignment before computing
+    mean squared error per residue.
+
+    This gives cleaner gradients than Chamfer for ordered targets and avoids
+    "clumping" failure modes.
+
+    Args:
+        target_points: Ordered target path, shape (L, 3) where L = protein length.
+
+    Returns:
+        A callable ``loss_fn(inputs, outputs, aux) -> dict`` that returns
+        ``{"path": loss}`` where loss is mean squared distance per residue.
+    """
+    target = jnp.asarray(target_points, dtype=jnp.float32)
+    _validate_points(target)
+    target_centered = target - target.mean(axis=0)
+
+    CA_INDEX = 1
+
+    def path_loss(inputs, outputs, aux):
+        positions = outputs["structure_module"]["final_atom_positions"]
+        ca = positions[:, CA_INDEX, :]
+        ca_centered = ca - ca.mean(axis=0)
+        ca_aligned = _kabsch_align(ca_centered, target_centered)
+        # Per-index MSE: mean of squared distances at each position
+        loss = jnp.mean(jnp.sum((ca_aligned - target_centered) ** 2, axis=-1))
+        return {"path": loss}
+
+    return path_loss
+
