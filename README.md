@@ -17,9 +17,9 @@ Design proteins to approximate arbitrary STL shapes by integrating custom shape 
 ### Local (Advanced)
 
 **Requirements:**
-- Python 3.10+ (tested on 3.13)
-- GPU recommended (CPU is very slow)
-- AlphaFold parameters (see below)
+- Python 3.10+
+- GPU recommended
+- AlphaFold parameters
 
 **Installation:**
 ```bash
@@ -46,7 +46,7 @@ python examples/design_from_stl.py \
   --stl cylinder \
   --target-mode centerline \
   --length 80 \
-  --target-extent 30.0 \
+  --target-extent 120.0 \
   --soft-iters 300 --temp-iters 150 --hard-iters 20 \
   --path-weight 0.02 --con 0.2 --plddt 2.0 --pae 0.2 \
   --data-dir . \
@@ -100,23 +100,6 @@ Use `examples/colab_stl_notebook.ipynb` with presets:
 python examples/design_from_stl.py --stl <name> --target-mode centerline [options]
 ```
 
-### Programmatic
-```python
-from src import STLProteinDesigner
-
-designer = STLProteinDesigner(
-    stl_path="examples/stl/cylinder.stl",
-    protein_length=80,
-    target_extent=30.0,
-    stl_target_mode="centerline",
-    path_weight=0.02,
-    data_dir="path/to/alphafold/params",
-)
-seq = designer.design(soft_iters=300, temp_iters=150, hard_iters=20)
-pdb_str = designer.get_structure(save_path="structure.pdb")
-designer.plot_overlay(save_path="overlay.png")
-```
-
 ## Inspection Tools
 
 **Inspect STL files:**
@@ -138,48 +121,11 @@ python scripts/generate_stls.py
 
 - **Tube-like shapes only**: Centerline extraction assumes roughly cylindrical cross-sections
 - **Scale ambiguity**: `target_extent` controls scaling but optimal values depend on protein length
-- **GPU recommended**: CPU runs are very slow (minutes per iteration)
 - **Heuristic centerline**: PCA + binning works well but may fail on complex geometries
 - **Single-chain only**: Current implementation designs single protein chains
 
-## Future Work
+## Documentation
 
-- [ ] Surface mode with Chamfer loss (for non-tube shapes)
-- [ ] Multi-chain design
-- [ ] Automatic `target_extent` tuning
-- [ ] Improved centerline extraction (skeletonization methods)
-- [ ] Interactive visualization tools
-
-## Project Structure
-
-```
-colabdesign-stl/
-├── src/                    # Core library
-│   ├── stl_processing.py  # STL → points, centerline extraction
-│   ├── losses.py          # JAX Chamfer + path loss + Kabsch
-│   └── stl_designer.py    # High-level orchestrator
-├── examples/
-│   ├── colab_stl_notebook.ipynb  # Main notebook
-│   ├── design_from_stl.py        # CLI entrypoint
-│   └── stl/                       # Example STL files
-│       ├── *.stl                  # Mesh files
-│       └── generators/            # STL generator scripts
-├── scripts/                # Utility scripts
-│   ├── generate_stls.py   # Generate example STLs
-│   ├── inspect_stl.py     # Inspect STL files
-│   └── build_target_points.py  # Build target points
-├── results/                # Curated outputs
-│   ├── overlays/          # Overlay plots
-│   └── metrics.csv        # Quantitative metrics
-└── tests/                  # Unit tests
-```
-
-## Citation
-
-If you use this code, please cite:
-- ColabDesign: [sokrypton/ColabDesign](https://github.com/sokrypton/ColabDesign)
-- AlphaFold: [Jumper et al., Nature 2021](https://www.nature.com/articles/s41586-021-03819-2)
-
-## License
-
-See `LICENSE` file. This project extends ColabDesign, which has its own license.
+- **[DESIGN_NOTES.md](DESIGN_NOTES.md)**: Architecture, design decisions, and technical details
+- **[examples/stl/README.md](examples/stl/README.md)**: STL file documentation and generation
+- **[results/README.md](results/README.md)**: Results documentation
