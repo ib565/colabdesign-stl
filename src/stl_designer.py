@@ -79,6 +79,7 @@ class STLProteinDesigner:
         center: bool = True,
         sample_seed: Optional[int] = 0,
         chamfer_weight: float = 1.0,
+        con_weight: float = 1.0,
         plddt_weight: float = 0.1,
         pae_weight: float = 0.05,
         use_sqrt: bool = False,
@@ -140,7 +141,7 @@ class STLProteinDesigner:
         weights.update(
             {
                 "chamfer": chamfer_weight,
-                "con": weights.get("con", 1.0),
+                "con": con_weight,
                 "i_con": weights.get("i_con", 0.0),
                 "plddt": plddt_weight,
                 "pae": pae_weight,
