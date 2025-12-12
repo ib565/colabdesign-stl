@@ -5,9 +5,12 @@ Design proteins to approximate arbitrary STL shapes by integrating custom shape 
 ## Status
 - STL processing ✅
 - Chamfer loss (JAX) ✅
-- Kabsch alignment fix applied ✅ (pred @ R.T)
+- Per-index path loss ✅ (ordered targets; uses Kabsch)
+- Kabsch fixes ✅
+  - correct rotation application (pred @ R.T)
+  - rank-deficient targets (collinear lines) regularized to avoid NaNs
 - STLProteinDesigner + CLI ✅
-- Alignment sanity checks (tests + script) ✅
+- Alignment + Kabsch sanity checks ✅
 
 ## Requirements
 - Python 3.13
@@ -38,7 +41,7 @@ Notes:
 - If running `python examples/sample_points.py` directly, ensure project root is on `PYTHONPATH` or add `sys.path` tweak.
 
 ## Tests
-Run unit tests (Chamfer + Kabsch + alignment sanity):
+Run unit tests (Chamfer + path/Kabsch + alignment sanity):
 ```pwsh
 python -m pytest
 ```
@@ -57,7 +60,7 @@ python examples/chamfer_demo.py
 Shows squared vs sqrt losses and gradient values.
 
 ## Stage 3a: Minimal ColabDesign integration
-Smoke-test the shape loss with a simple line target:
+Smoke-test with a simple line target (uses per-index path loss):
 ```pwsh
 # Ensure colabdesign is installed / on PYTHONPATH. Run with GPU for speed.
 python examples/minimal_chamfer_hallucination.py \
@@ -72,6 +75,11 @@ What to expect:
 - Sequence printed (first 60 aa)
 
 **Note:** Uses `design_3stage()` with separate soft/temp/hard iteration counts for better optimization. First JIT compile takes 1-3 minutes on CPU.
+
+### Important: collinear targets (lines)
+- Plain Kabsch SVD is ill-conditioned on rank-1 targets → NaNs.
+- We regularize `H = pred.T @ target` with a small identity to keep SVD finite.
+- Tests cover this (`test_kabsch_collinear_target_no_nan`); line targets now run without crashing.
 
 ### ColabDesign install & Alphafold weights
 - Install ColabDesign into the active venv (sibling clone):
@@ -142,6 +150,7 @@ print(seq[:60], metrics)
 Notes:
 - First JIT compile still takes 1–3 minutes on CPU; GPU is recommended.
 - Chamfer is squared by default for speed; use `--use-sqrt` for Å units.
+- For ordered targets (line/helix/centerline), prefer per-index path loss (`use_path_loss=True` in `STLProteinDesigner`), and set `len(target_points)==protein_length`.
 - `design_3stage` is used for better convergence on hallucination.
 - Kabsch alignment is applied after centering both target and predicted Cα; scale is not normalized beyond your `target_extent`.
 

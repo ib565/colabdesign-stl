@@ -2,7 +2,7 @@
 
 ## Project Goal
 
-Extend ColabDesign AF to accept an STL file as input and design a protein sequence whose predicted structure approximates the STL shape. Current state: STL processing, Chamfer loss, Kabsch-aligned loss callback, STLProteinDesigner, and alignment sanity tests/scripts are in place. Kabsch rotation application is fixed (use `pred @ R.T`).
+Extend ColabDesign AF to accept an STL file as input and design a protein sequence whose predicted structure approximates the STL shape. Current state: STL processing, Chamfer loss, per-index path loss for ordered targets, Kabsch-aligned loss callbacks, STLProteinDesigner, and alignment sanity tests/scripts are in place. Kabsch fixes include correct rotation application (`pred @ R.T`) and stability for rank-deficient (collinear) targets.
 
 ---
 
@@ -255,9 +255,15 @@ Expected:
 
 ### Objective
 
-Implement a differentiable Chamfer distance loss in JAX.
+Implement differentiable shape losses in JAX.
 
-**Implemented:** `src/losses.py` with `chamfer_distance(..., use_sqrt=False)` (squared by default for speed; optional `use_sqrt=True` for interpretable Å). Kabsch rotation application is fixed (`pred @ R.T` after SVD). Tests in `tests/test_losses.py` cover identical/offset clouds, gradients via `jax.grad`, sqrt path, and input validation. Alignment sanity tests live in `tests/test_alignment_sanity.py`. Requirements now include `jax==0.4.34` and `pytest`.
+**Implemented:** `src/losses.py` with:
+- `chamfer_distance(..., use_sqrt=False)` (squared by default for speed; optional `use_sqrt=True` for Å).
+- `make_path_loss(...)` per-index MSE for ordered targets (requires `len(target_points)==protein_length`).
+- Kabsch fixes:
+  - correct rotation application (`pred @ R.T` after SVD)
+  - stability for rank-deficient/collinear targets via small regularization on `H` (prevents NaNs on lines).
+Tests in `tests/test_losses.py` cover identical/offset clouds, gradients via `jax.grad`, sqrt path, input validation, **and collinear Kabsch non-NaN**. Alignment sanity tests live in `tests/test_alignment_sanity.py`. Requirements now include `jax==0.4.34` and `pytest`.
 
 ### Tasks
 
