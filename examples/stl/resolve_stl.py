@@ -3,7 +3,7 @@ from typing import Callable, Dict, Tuple
 
 from .make_cylinder_stl import make_cylinder_stl
 from .make_sine_tube_stl import make_sine_tube_stl
-from ..make_helix_stl import make_helix_stl
+from .make_helix_stl import make_helix_stl
 
 
 Generator = Tuple[Callable[..., None], Dict]
