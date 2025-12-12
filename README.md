@@ -81,6 +81,14 @@ What to expect:
 - We regularize `H = pred.T @ target` with a small identity to keep SVD finite.
 - Tests cover this (`test_kabsch_collinear_target_no_nan`); line targets now run without crashing.
 
+### Working configs (MVP, per-index path loss)
+Keep `NUM_TARGET_POINTS == PROTEIN_LENGTH` and `USE_PATH_LOSS=True`.
+
+| Target | PROTEIN_LENGTH | TARGET_EXTENT | LINE_LENGTH | PATH_WEIGHT | CON / PAE / PLDDT | Iters (soft/temp/hard) | Notes |
+|--------|----------------|---------------|-------------|-------------|-------------------|------------------------|-------|
+| Line   | 80             | 150           | 150         | 0.02        | 0.2 / 0.2 / 2.0   | 200 / 100 / 20         | Extended line needs larger extent and low con/pae |
+| Helix  | 80             | 30            | 40          | 0.02        | 0.5 / 0.2 / 2.0   | 300 / 150 / 20         | Compact helix works with smaller extent and higher con |
+
 ### ColabDesign install & Alphafold weights
 - Install ColabDesign into the active venv (sibling clone):
   ```pwsh
