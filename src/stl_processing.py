@@ -209,9 +209,21 @@ def stl_to_centerline_points(
 
     # PCA canonicalization
     pts_rot, rot = _pca_canonicalize(pts)
+    
+    # Use extent-based axis selection for stability (more robust than PC0 for helices)
+    # where variance can be ambiguous. This ensures we always bin along the longest axis.
+    extents = pts_rot.max(axis=0) - pts_rot.min(axis=0)
+    extent_axis = int(np.argmax(extents))
+    
+    # Reorder columns so the axis with largest extent becomes column 0
+    if extent_axis != 0:
+        col_order = np.array([extent_axis] + [i for i in range(3) if i != extent_axis])
+        pts_rot = pts_rot[:, col_order]
+        rot = rot[:, col_order]
+    
     axis_vals = pts_rot[:, 0]
 
-    # Bin along PC0 with deterministic handling of empty bins (linear interp)
+    # Bin along the extent-based axis (now column 0) with deterministic handling of empty bins (linear interp)
     b = bins or max(4 * num_points, 16)
     edges = np.linspace(axis_vals.min(), axis_vals.max(), b + 1)
     inds = np.digitize(axis_vals, edges) - 1
