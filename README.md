@@ -14,7 +14,7 @@ Design proteins to approximate arbitrary STL shapes by integrating custom shape 
 
 **Note:** First run downloads AlphaFold parameters (~3.5GB) and JIT compilation takes 30-90 seconds.
 
-### Local (Advanced)
+### Local
 
 **Requirements:**
 - Python 3.10+
@@ -55,20 +55,20 @@ python examples/design_from_stl.py \
 
 ## Examples
 
-We demonstrate protein design for three tube-like STL shapes:
+Protein designs for three tube-like STL shapes are shown below:
 
 ### Cylinder
-A straight cylindrical tube (simplest case for centerline extraction).
+A straight cylindrical tube.
 
 ![Cylinder overlay](results/overlays/cylinder.png)
 
 ### Sine Tube
-A tube following a sine-wave path (tests centerline extraction on curved shapes).
+A tube following a sine-wave path.
 
 ![Sine tube overlay](results/overlays/sine.png)
 
 ### Helix Tube
-A helical tube with one complete turn (tests 3D helical centerline extraction).
+A helical tube with one complete turn.
 
 ![Helix tube overlay](results/overlays/helix.png)
 
@@ -88,8 +88,6 @@ Quantitative metrics for the three example shapes:
 
 **Trade-off:** There is an emergent trade-off between shape matching (path loss) and structure quality (pLDDT).
 
-See `results/metrics.csv` for full details.
-
 ## How It Works
 
 1. **STL Processing**: Load STL mesh → sample surface points → extract centerline via PCA + binning
@@ -97,11 +95,6 @@ See `results/metrics.csv` for full details.
 3. **Path Loss**: Per-index MSE loss between predicted Cα coordinates and target centerline (with Kabsch alignment)
 4. **Optimization**: ColabDesign hallucination protocol with custom loss callback
 
-**Key Features:**
-- **Centerline extraction**: PCA canonicalization + binning + smoothing for tube-like shapes
-- **Per-index path loss**: Cleaner gradients than Chamfer for ordered targets
-- **Kabsch alignment**: Rotation-invariant loss computation
-- **No fork required**: Uses ColabDesign's `loss_callback` system
 
 ## Usage
 

@@ -1,4 +1,4 @@
-shape,mode,L,target_extent,centerline_surface_samples,seed,path,plddt,pae
+shape,mode,L,target_extent,centerline_surface_samples,seed,path_loss,plddt,pae
 cylinder,centerline,80,100.00,10000,0,39.38,0.60,0.57
 sine_tube,centerline,80,120.00,12000,0,58.81,0.79,0.53
 helix_tube_1turn,centerline,80,100.00,12000,0,55.05,0.79,0.57

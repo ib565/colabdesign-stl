@@ -4,9 +4,9 @@ This document captures the key design decisions and technical details behind the
 
 ## Architecture
 
-### Integration Strategy: No Fork Required
+### Integration Strategy
 
-**Key Decision:** Use ColabDesign's built-in `loss_callback` system rather than forking the codebase.
+Use ColabDesign's built-in `loss_callback` system.
 
 ```python
 # The integration pattern
@@ -103,7 +103,6 @@ def make_path_loss(target_points: np.ndarray) -> Callable:
 - `bins`: Default `4 * num_points` (automatic)
 - `smooth_window`: Default 5
 
-
 **Limitations:**
 - Assumes roughly cylindrical cross-sections
 - May fail on complex geometries (branches, sharp corners)
@@ -143,7 +142,7 @@ ColabDesign calls loss callbacks during optimization. Our callback extracts Cα 
 
 Controls scale in Ångströms. Guidance: ~1.5Å per residue (helix), so 80 residues → ~120Å. Typical range: 50-200Å.
 
-**Critical Limitation:** `target_extent` must be manually tuned per STL shape. Different shapes require different values (e.g., cylinder: 100Å, sine_tube: 120Å) and there's no automatic way to determine optimal scaling. This makes the workflow less automated and requires trial-and-error for new shapes.
+**Limitation:** `target_extent` must be manually tuned per STL shape. Different shapes require different values (e.g., cylinder: 100Å, sine_tube: 120Å) and there's no automatic way to determine optimal scaling. This makes the workflow less automated and requires trial-and-error for new shapes.
 
 ### Path Weight (`path_weight`)
 
@@ -151,7 +150,7 @@ Default: 0.02. Controls shape constraint vs. stability trade-off. Lower values f
 
 ### Centerline Surface Samples (`centerline_surface_samples`)
 
-Default: 10,000. Recommended: 10,000-12,000 for typical shapes.
+Default: 10,000.
 
 ## Failure Modes & Mitigations
 
