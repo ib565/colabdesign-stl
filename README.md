@@ -4,55 +4,6 @@ Design proteins to approximate arbitrary STL shapes by integrating custom shape 
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ib565/colabdesign-stl/blob/master/examples/colab_stl_notebook.ipynb)
 
-## Quick Start
-
-### Colab (Recommended)
-
-1. **Open the notebook**: Click the "Open In Colab" badge above or [open directly](https://colab.research.google.com/github/ib565/colabdesign-stl/blob/master/examples/colab_stl_notebook.ipynb)
-2. **Choose a preset**: Set `PRESET = "stl_centerline_cylinder"` (or `sine_tube`, `helix_tube_1turn`)
-3. **Run all cells**: The notebook will clone the repo, install dependencies, and run protein design
-
-**Note:** First run downloads AlphaFold parameters (~3.5GB) and JIT compilation takes 30-90 seconds.
-
-### Local
-
-**Requirements:**
-- Python 3.10+
-- GPU recommended
-- AlphaFold parameters
-
-**Installation:**
-```bash
-git clone https://github.com/ib565/colabdesign-stl.git
-cd colabdesign-stl
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-pip install git+https://github.com/sokrypton/ColabDesign.git
-```
-
-**AlphaFold Parameters:**
-Download and extract AlphaFold parameters (~3.5GB):
-```bash
-mkdir params
-curl -L -o alphafold_params_2022-12-06.tar https://storage.googleapis.com/alphafold/alphafold_params_2022-12-06.tar
-tar -xf alphafold_params_2022-12-06.tar -C params
-export AF_DATA_DIR=$(pwd)  # Point to directory containing params/
-```
-
-**Run design:**
-```bash
-python examples/design_from_stl.py \
-  --stl cylinder \
-  --target-mode centerline \
-  --length 80 \
-  --target-extent 120.0 \
-  --soft-iters 300 --temp-iters 150 --hard-iters 20 \
-  --path-weight 0.02 --con 0.2 --plddt 2.0 --pae 0.2 \
-  --data-dir . \
-  --out-dir outputs/cylinder --plot
-```
-
 ## Examples
 
 Protein designs for three tube-like STL shapes are shown below:
@@ -96,6 +47,58 @@ Quantitative metrics for the three example shapes:
 4. **Optimization**: ColabDesign hallucination protocol with custom loss callback
 
 
+## Quick Start
+
+### Colab (Recommended)
+
+1. **Open the notebook**: Click the "Open In Colab" badge above or [open directly](https://colab.research.google.com/github/ib565/colabdesign-stl/blob/master/examples/colab_stl_notebook.ipynb)
+2. **Choose a preset**: Set `PRESET = "stl_centerline_cylinder"` (or `sine_tube`, `helix_tube_1turn`)
+3. **Run all cells**: The notebook will clone the repo, install dependencies, and run protein design
+
+**Note:** First run downloads AlphaFold parameters (~3.5GB)
+
+### Local
+
+**Requirements:**
+- Python 3.10+
+- GPU recommended
+- AlphaFold parameters
+
+**Installation:**
+```bash
+git clone https://github.com/ib565/colabdesign-stl.git
+cd colabdesign-stl
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+pip install git+https://github.com/sokrypton/ColabDesign.git
+```
+
+**AlphaFold Parameters:**
+Download and extract AlphaFold parameters (~3.5GB):
+```bash
+mkdir params
+curl -L -o alphafold_params_2022-12-06.tar https://storage.googleapis.com/alphafold/alphafold_params_2022-12-06.tar
+tar -xf alphafold_params_2022-12-06.tar -C params
+export AF_DATA_DIR=$(pwd)  # Point to directory containing params/
+```
+
+**Run design:**
+```bash
+python examples/design_from_stl.py \
+  --stl cylinder \
+  --target-mode centerline \
+  --length 80 \
+  --target-extent 120.0 \
+  --soft-iters 300 --temp-iters 150 --hard-iters 20 \
+  --path-weight 0.02 --con 0.2 --plddt 2.0 --pae 0.2 \
+  --data-dir . \
+  --out-dir outputs/cylinder --plot
+```
+
+**Note:** Due to GPU constraints, the full local pipeline has not been run end-to-end; all reported results are from Colab runs.
+
+
 ## Usage
 
 ### Notebook (Recommended)
@@ -126,12 +129,6 @@ python scripts/build_target_points.py --mode stl_centerline --stl-path examples/
 python scripts/generate_stls.py
 ```
 
-## Limitations
-
-- **Tube-like shapes only**: Centerline extraction assumes roughly cylindrical cross-sections
-- **Scale ambiguity**: `target_extent` controls scaling but optimal values depend on protein length
-- **Heuristic centerline**: PCA + binning works well but may fail on complex geometries
-- **Single-chain only**: Current implementation designs single protein chains
 
 ## Documentation
 
