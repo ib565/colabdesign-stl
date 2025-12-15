@@ -129,6 +129,10 @@ python scripts/build_target_points.py --mode stl_centerline --stl-path examples/
 python scripts/generate_stls.py
 ```
 
+## Limitations
+- Only supports tube-like shapes.
+- Assumes equal length of the protein and the target.
+- Need to manually set the target extent.
 
 ## Documentation
 
