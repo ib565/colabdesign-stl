@@ -16,7 +16,7 @@ All results were generated using `examples/colab_stl_notebook.ipynb` with the fo
 
 **Common settings:**
 - `PROTEIN_LENGTH = 80`
-- `TARGET_EXTENT = 30.0`
+- `TARGET_EXTENT = 120.0`
 - `PATH_WEIGHT = 0.02`
 - `CON_WEIGHT = 0.2`
 - `PLDDT_WEIGHT = 2.0`

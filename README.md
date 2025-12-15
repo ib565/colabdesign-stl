@@ -52,7 +52,7 @@ Quantitative metrics for the three example shapes:
 ### Colab (Recommended)
 
 1. **Open the notebook**: Click the "Open In Colab" badge above or [open directly](https://colab.research.google.com/github/ib565/colabdesign-stl/blob/master/examples/colab_stl_notebook.ipynb)
-2. **Choose a preset**: Set `PRESET = "stl_centerline_cylinder"` (or `sine_tube`, `helix_tube_1turn`)
+2. **Choose a preset**: Set `PRESET = "stl_centerline_cylinder"` (or `stl_centerline_sine`, `stl_centerline_helix1turn`)
 3. **Run all cells**: The notebook will clone the repo, install dependencies, and run protein design
 
 **Note:** First run downloads AlphaFold parameters (~3.5GB)
